@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "skillscope.web.app"],
       "port": 5000
+    },
+    {
+      "name": "skillscope-docs",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8000", "--directory", "docs"],
+      "port": 8000
     }
   ]
 }

@@ -73,7 +73,7 @@ def render_flow_diagram(console: Console, flow_diagram: str | None, source: str 
         console.print(f"[grey50]Flow diagram written to {flow_out}[/grey50]")
 
 
-def render(console: Console, source_label: str, result: dict, flow_out: str | None = None) -> None:
+def render(console: Console, source_label: str, result: dict, flow_out: str | None = None, eli5: bool = False) -> None:
     console.print(Panel(f"[bold]{source_label}[/bold]", style="bold blue", expand=False))
 
     render_security_findings(console, result.get("security_findings") or [])
@@ -113,7 +113,9 @@ def render(console: Console, source_label: str, result: dict, flow_out: str | No
         console.print(Panel(result["semantic_error"], title="Semantic Analysis", border_style="red"))
         return
 
-    if result.get("summary"):
+    if eli5 and result.get("eli5_summary"):
+        console.print(Panel(result["eli5_summary"], title="Summary (explain like I'm 5)", border_style="magenta"))
+    elif result.get("summary"):
         console.print(Panel(result["summary"], title="Summary (plain English)", border_style="green"))
 
     if result.get("trigger_conditions"):
@@ -144,6 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-semantic", action="store_true", help="Skip the Claude API call; structural checks only.")
     parser.add_argument("--json", action="store_true", help="Print raw JSON instead of a formatted report.")
     parser.add_argument("--flow-out", metavar="PATH", help="Also write the Mermaid flow diagram source to this file (e.g. flow.mmd).")
+    parser.add_argument("--eli5", action="store_true", help="Show the dead-simple 'explain like I'm 5' summary instead of the technical one.")
     args = parser.parse_args(argv)
 
     console = Console()
@@ -164,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2))
         return 0
 
-    render(console, args.path, result, flow_out=args.flow_out)
+    render(console, args.path, result, flow_out=args.flow_out, eli5=args.eli5)
 
     has_errors = any(w.get("severity") == "error" for w in result.get("structural_warnings") or [])
     has_severe_security_findings = any(

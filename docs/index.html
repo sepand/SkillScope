@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SkillScope</title>
+<title>SkillScope (demo)</title>
 <style>
   :root {
     --bg: #0f1117;
@@ -31,9 +31,14 @@
     display: flex;
     align-items: baseline;
     gap: 0.75rem;
+    flex-wrap: wrap;
   }
   header h1 { font-size: 1.3rem; margin: 0; }
   header p { margin: 0; color: var(--text-dim); font-size: 0.85rem; }
+  header .demo-badge {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    background: rgba(109,141,255,0.15); color: var(--accent); padding: 0.15rem 0.55rem; border-radius: 999px;
+  }
   .layout {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -77,18 +82,17 @@
   #inputPanel.collapsed .panel-header { margin-bottom: 0; justify-content: center; }
   #inputPanel.collapsed .panel-header .label { display: none; }
   #inputPanel.collapsed .panel-body { display: none; }
-  textarea {
+  textarea, input[type="password"], input[type="text"] {
     width: 100%;
-    min-height: 380px;
     background: #0b0d13;
     color: var(--text);
     border: 1px solid var(--panel-border);
     border-radius: 8px;
-    padding: 0.75rem;
+    padding: 0.6rem 0.75rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.85rem;
-    resize: vertical;
   }
+  textarea { min-height: 340px; resize: vertical; }
   .controls { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-top: 0.75rem; }
   button {
     background: var(--accent);
@@ -107,6 +111,12 @@
     background: #2a1f10; border: 1px solid var(--warning); color: var(--warning);
     padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.8rem; margin-bottom: 0.75rem;
   }
+  .info-banner {
+    background: #101a2a; border: 1px solid var(--info); color: var(--info);
+    padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.8rem; margin-bottom: 0.75rem; line-height: 1.5;
+  }
+  .key-field { margin-bottom: 0.9rem; }
+  .key-field .label { margin-bottom: 0.3rem; }
   .card { border: 1px solid var(--panel-border); border-radius: 8px; padding: 0.85rem; margin-bottom: 0.75rem; }
   .card h3 { margin: 0 0 0.5rem 0; font-size: 0.95rem; }
   .card.severity-error { border-left: 4px solid var(--error); }
@@ -202,12 +212,14 @@
   .eli5-toggle-btn:hover { background: rgba(109,141,255,0.12); }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #0b0d13; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px; margin-right: 0.4rem; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  #pyodideStatus { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.5rem; }
 </style>
 </head>
 <body>
 <header>
   <h1>SkillScope</h1>
-  <p>Paste or upload a SKILL.md and get a plain-English explanation, flagged ambiguities, and structural lint.</p>
+  <span class="demo-badge">Browser demo</span>
+  <p>Paste or upload a SKILL.md and get a plain-English explanation, flagged ambiguities, and structural lint &mdash; runs entirely in your browser.</p>
 </header>
 
 <div class="layout" id="layout">
@@ -217,20 +229,33 @@
       <button id="collapseBtn" class="icon-btn" type="button" title="Collapse">&laquo;</button>
     </div>
     <div class="panel-body" id="inputPanelBody">
-      {% if not api_key_configured %}
-      <div class="warn-banner">
-        ANTHROPIC_API_KEY is not set on the server. Structural analysis (including pattern-based
-        security scanning) will still work; semantic analysis (summary, ambiguities, AI-flagged
-        security findings) will be skipped until it's configured.
+      <div class="info-banner">
+        This page runs the real SkillScope parsing/security-scan logic locally in your browser via
+        <a href="https://pyodide.org/" style="color:var(--info);">Pyodide</a> (Python compiled to WebAssembly) &mdash;
+        structural analysis needs no API key and nothing you paste here is sent anywhere.
+        AI-powered analysis (summary, ambiguities, flow diagram) calls the Anthropic API
+        <strong>directly from your browser</strong> using a key you provide below; it is stored only in
+        this browser (if you check "remember") and is sent only to <code>api.anthropic.com</code>, never
+        to any server of ours &mdash; this page is static and has no backend. For a version that keeps
+        your key server-side instead, run the Flask app from the
+        <a href="https://github.com/sepand/SkillScope" style="color:var(--info);">repo</a> locally.
       </div>
-      {% endif %}
-      <textarea id="content" placeholder="---&#10;name: my-skill&#10;description: ...&#10;---&#10;&#10;## Instructions&#10;..."></textarea>
+      <div class="key-field">
+        <div class="label">Anthropic API key (optional &mdash; only needed for AI-powered analysis)</div>
+        <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off">
+        <label class="checkbox" style="margin-top:0.4rem;">
+          <input type="checkbox" id="rememberKey"> Remember key in this browser (localStorage)
+        </label>
+      </div>
+      <div class="label">SKILL.md content</div>
+      <textarea id="content" autocomplete="off" placeholder="---&#10;name: my-skill&#10;description: ...&#10;---&#10;&#10;## Instructions&#10;..."></textarea>
       <div class="controls">
-        <button id="analyzeBtn">Analyze</button>
+        <button id="analyzeBtn" disabled>Loading Pyodide&hellip;</button>
         <button id="loadExampleBtn" class="secondary" type="button">Load ambiguous example</button>
         <label class="checkbox"><input type="checkbox" id="structuralOnly"> Structural only (skip API call)</label>
         <input type="file" id="fileInput" accept=".md,.markdown,text/markdown,text/plain">
       </div>
+      <div id="pyodideStatus">Loading Python runtime&hellip;</div>
     </div>
   </div>
 
@@ -241,6 +266,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/pyodide/v0.29.4/full/pyodide.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.min.js"></script>
 <script>
 mermaid.initialize({
@@ -270,6 +296,9 @@ const loadExampleBtn = document.getElementById('loadExampleBtn');
 const layoutEl = document.getElementById('layout');
 const inputPanel = document.getElementById('inputPanel');
 const collapseBtn = document.getElementById('collapseBtn');
+const apiKeyEl = document.getElementById('apiKey');
+const rememberKeyEl = document.getElementById('rememberKey');
+const pyodideStatusEl = document.getElementById('pyodideStatus');
 
 const AMBIGUOUS_EXAMPLE = `---
 name: helper
@@ -297,6 +326,26 @@ fileInput.addEventListener('change', () => {
   reader.readAsText(file);
 });
 
+try {
+  const savedKey = localStorage.getItem('skillscope_api_key');
+  if (savedKey) {
+    apiKeyEl.value = savedKey;
+    rememberKeyEl.checked = true;
+  }
+} catch (e) {}
+
+function persistKey() {
+  try {
+    if (rememberKeyEl.checked && apiKeyEl.value) {
+      localStorage.setItem('skillscope_api_key', apiKeyEl.value);
+    } else {
+      localStorage.removeItem('skillscope_api_key');
+    }
+  } catch (e) {}
+}
+apiKeyEl.addEventListener('change', persistKey);
+rememberKeyEl.addEventListener('change', persistKey);
+
 function setLeftCollapsed(collapsed) {
   inputPanel.classList.toggle('collapsed', collapsed);
   layoutEl.classList.toggle('left-collapsed', collapsed);
@@ -304,11 +353,9 @@ function setLeftCollapsed(collapsed) {
   collapseBtn.title = collapsed ? 'Expand' : 'Collapse';
   try { localStorage.setItem('skillscope_left_collapsed', collapsed ? '1' : '0'); } catch (e) {}
 }
-
 collapseBtn.addEventListener('click', () => {
   setLeftCollapsed(!inputPanel.classList.contains('collapsed'));
 });
-
 (function restoreCollapsedState() {
   let collapsed = false;
   try { collapsed = localStorage.getItem('skillscope_left_collapsed') === '1'; } catch (e) {}
@@ -333,7 +380,6 @@ function renderHighlightedSource(sourceText, ambiguities, securityFindings) {
     if (start === -1) return;
     spans.push({ start, end: start + f.excerpt.length, kind: 'security', idx, severity: f.severity });
   });
-  // Security findings win over ambiguities when they overlap at the same start.
   spans.sort((a, b) => (a.start - b.start) || (a.kind === 'security' ? -1 : 1));
 
   const merged = [];
@@ -386,7 +432,7 @@ function renderSecuritySection(findings) {
     return html;
   }
 
-  html += `<div class="security-banner alert">${findings.length} security finding${findings.length === 1 ? '' : 's'} flagged${hasSevere ? ' — review before trusting this skill' : ''}.</div>`;
+  html += `<div class="security-banner alert">${findings.length} security finding${findings.length === 1 ? '' : 's'} flagged${hasSevere ? ' &mdash; review before trusting this skill' : ''}.</div>`;
 
   findings.forEach((f, idx) => {
     const categoryLabel = SEC_CATEGORY_LABELS[f.category] || escapeHtml(f.category || 'other');
@@ -555,32 +601,159 @@ function render(result) {
   });
 }
 
+// --- Pyodide setup: loads the real skillscope.core modules (mirrored into pysrc/ by
+// scripts/sync_pyodide.py) so structural parsing, the security pattern scan, the flow
+// fallback, and the semantic prompt/schema/response-parsing logic are the exact same
+// code the CLI and Flask app use — nothing is reimplemented in JavaScript. ---
+
+const PY_FILES = [
+  "pysrc/skillscope/__init__.py",
+  "pysrc/skillscope/core/__init__.py",
+  "pysrc/skillscope/core/models.py",
+  "pysrc/skillscope/core/parser.py",
+  "pysrc/skillscope/core/security.py",
+  "pysrc/skillscope/core/flow.py",
+  "pysrc/skillscope/core/analyzer.py",
+];
+
+const GLUE_SCRIPT = `
+import json
+from skillscope.core.parser import parse_skill
+from skillscope.core.analyzer import SYSTEM_PROMPT, RESPONSE_TOOL, TOOL_NAME, MODEL, build_user_prompt, build_semantic_analysis
+from skillscope.core.models import SkillAnalysis, SemanticAnalysis
+
+def js_get_request(content):
+    structural = parse_skill(content)
+    return json.dumps({
+        "model": MODEL,
+        "max_tokens": 4096,
+        "system": SYSTEM_PROMPT,
+        "tool": RESPONSE_TOOL,
+        "tool_name": TOOL_NAME,
+        "user": build_user_prompt(content, structural),
+    })
+
+def js_analyze(content, semantic_input, semantic_error):
+    structural = parse_skill(content)
+    if semantic_error:
+        semantic = SemanticAnalysis(summary="", trigger_conditions="", error=semantic_error)
+    elif semantic_input is not None:
+        semantic = build_semantic_analysis(dict(semantic_input))
+    else:
+        semantic = None
+    analysis = SkillAnalysis(raw_content=content, structural=structural, semantic=semantic)
+    return json.dumps(analysis.to_dict())
+`;
+
+let pyodideInstance = null;
+
+async function initPyodide() {
+  pyodideStatusEl.textContent = 'Loading Python runtime (Pyodide)…';
+  const py = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.4/full/' });
+
+  pyodideStatusEl.textContent = 'Loading PyYAML…';
+  await py.loadPackage(['pyyaml']);
+
+  pyodideStatusEl.textContent = 'Loading SkillScope core modules…';
+  py.FS.mkdirTree('/home/pyodide/skillscope/core');
+  for (const path of PY_FILES) {
+    const resp = await fetch(path);
+    if (!resp.ok) throw new Error(`Failed to fetch ${path}: ${resp.status}`);
+    const text = await resp.text();
+    const dest = '/home/pyodide/' + path.replace('pysrc/', '');
+    py.FS.writeFile(dest, text);
+  }
+  py.runPython('import sys\nsys.path.insert(0, "/home/pyodide")');
+  py.runPython(GLUE_SCRIPT);
+
+  pyodideInstance = py;
+  pyodideStatusEl.textContent = 'Ready — analysis runs locally in this tab.';
+  analyzeBtn.disabled = false;
+  analyzeBtn.textContent = 'Analyze';
+}
+
+const pyodideReady = initPyodide().catch(err => {
+  pyodideStatusEl.textContent = `Failed to load Python runtime: ${err.message || err}`;
+  pyodideStatusEl.style.color = 'var(--error)';
+});
+
+async function runAnalysis(content, useSemantic, apiKey) {
+  const py = pyodideInstance;
+  py.globals.set('_content', content);
+  const req = JSON.parse(py.runPython('js_get_request(_content)'));
+
+  // Pyodide maps JS `undefined` -> Python None, but JS `null` -> a distinct JsNull
+  // wrapper (not None) — use undefined as the "no value" sentinel here so the Python
+  // side's `is None` / `if semantic_error:` checks behave as expected.
+  let semanticInputPy;
+  let semanticError;
+
+  if (useSemantic && apiKey) {
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: req.model,
+          max_tokens: req.max_tokens,
+          system: req.system,
+          tools: [req.tool],
+          tool_choice: { type: 'tool', name: req.tool_name },
+          messages: [{ role: 'user', content: req.user }],
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        semanticError = `Anthropic API error (${resp.status}): ${(data && data.error && data.error.message) || resp.statusText}`;
+      } else {
+        const toolUse = (data.content || []).find(b => b.type === 'tool_use');
+        if (!toolUse) {
+          semanticError = 'The model did not return a tool call.';
+        } else {
+          semanticInputPy = py.toPy(toolUse.input);
+        }
+      }
+    } catch (err) {
+      semanticError = `Request to Anthropic API failed: ${err.message || err}`;
+    }
+  } else if (useSemantic && !apiKey) {
+    semanticError = 'No API key provided. Paste your Anthropic API key above to enable AI-powered analysis; structural results are still shown below.';
+  }
+
+  py.globals.set('_semantic_input', semanticInputPy);
+  py.globals.set('_semantic_error', semanticError);
+  const resultJson = py.runPython('js_analyze(_content, _semantic_input, _semantic_error)');
+  return JSON.parse(resultJson);
+}
+
 async function analyze() {
   const content = contentEl.value;
   if (!content.trim()) {
     resultsEl.innerHTML = '<p class="empty-state">Paste or upload a SKILL.md first.</p>';
     return;
   }
+  if (!pyodideInstance) {
+    resultsEl.innerHTML = '<p class="empty-state">Python runtime is still loading, try again in a moment.</p>';
+    return;
+  }
   analyzeBtn.disabled = true;
   const originalLabel = analyzeBtn.textContent;
   analyzeBtn.innerHTML = '<span class="spinner"></span>Analyzing…';
   try {
-    const resp = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, structural_only: structuralOnlyEl.checked }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) {
-      resultsEl.innerHTML = `<div class="card severity-error">${escapeHtml(data.error || 'Analysis failed.')}</div>`;
-      return;
-    }
-    render(data);
+    const useSemantic = !structuralOnlyEl.checked;
+    const result = await runAnalysis(content, useSemantic, apiKeyEl.value.trim());
+    result.source_content = content;
+    render(result);
   } catch (err) {
-    resultsEl.innerHTML = `<div class="card severity-error">Request failed: ${escapeHtml(String(err))}</div>`;
+    resultsEl.innerHTML = `<div class="card severity-error">Analysis failed: ${escapeHtml(String(err && err.message || err))}</div>`;
   } finally {
     analyzeBtn.disabled = false;
-    analyzeBtn.textContent = originalLabel;
+    analyzeBtn.textContent = originalLabel === 'Loading Pyodide…' ? 'Analyze' : originalLabel;
   }
 }
 

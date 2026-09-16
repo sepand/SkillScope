@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "skillscope-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "skillscope.web.app"],
+      "port": 5000
+    }
+  ]
+}

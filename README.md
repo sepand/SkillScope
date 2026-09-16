@@ -179,6 +179,11 @@ call the API from a `file://` origin. Any static file server works (`http.server
 `live-server`, `npx serve`, etc.), and the same page is what you'd deploy to GitHub Pages
 (repo Settings → Pages → deploy from branch `main`, folder `/docs`).
 
+`docs/.nojekyll` matters: GitHub Pages runs everything through Jekyll by default, which
+silently excludes any file or directory starting with `_` — including every `__init__.py`
+in `docs/pysrc/`, breaking the Pyodide package imports with 404s. That empty file disables
+Jekyll processing so the folder is served as plain static files.
+
 **Keeping it in sync:** `docs/pysrc/skillscope/` is a mirror of `skillscope/core/` (Pyodide
 can only fetch files GitHub Pages actually serves, which is just the `docs/` folder, so the
 real package can't be fetched directly). After changing anything under `skillscope/core/`,

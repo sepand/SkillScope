@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkillScope</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel-border: #2a2e3a;
+    --text: #e6e8ee;
+    --text-dim: #9aa1b1;
+    --accent: #6d8dff;
+    --error: #ff6b6b;
+    --warning: #f5c451;
+    --info: #58c4f0;
+    --good: #4fd08a;
+    --critical: #ff2d55;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+  header h1 { font-size: 1.3rem; margin: 0; }
+  header p { margin: 0; color: var(--text-dim); font-size: 0.85rem; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1.25rem;
+    align-items: start;
+    transition: grid-template-columns 0.15s ease;
+  }
+  .layout.left-collapsed { grid-template-columns: 44px 1fr; }
+  @media (max-width: 900px) {
+    .layout, .layout.left-collapsed { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 1rem;
+  }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.6rem;
+  }
+  .panel-header .label { margin-bottom: 0; }
+  .icon-btn {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+    flex: none;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--accent); }
+  #inputPanel.collapsed { padding: 0.6rem 0.45rem; }
+  #inputPanel.collapsed .panel-header { margin-bottom: 0; justify-content: center; }
+  #inputPanel.collapsed .panel-header .label { display: none; }
+  #inputPanel.collapsed .panel-body { display: none; }
+  textarea {
+    width: 100%;
+    min-height: 380px;
+    background: #0b0d13;
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    resize: vertical;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-top: 0.75rem; }
+  button {
+    background: var(--accent);
+    color: #0b0d13;
+    border: none;
+    border-radius: 6px;
+    padding: 0.55rem 1rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--panel-border); }
+  label.checkbox { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); }
+  input[type="file"] { color: var(--text-dim); font-size: 0.8rem; }
+  .warn-banner {
+    background: #2a1f10; border: 1px solid var(--warning); color: var(--warning);
+    padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.8rem; margin-bottom: 0.75rem;
+  }
+  .card { border: 1px solid var(--panel-border); border-radius: 8px; padding: 0.85rem; margin-bottom: 0.75rem; }
+  .card h3 { margin: 0 0 0.5rem 0; font-size: 0.95rem; }
+  .card.severity-error { border-left: 4px solid var(--error); }
+  .card.severity-warning { border-left: 4px solid var(--warning); }
+  .card.severity-info { border-left: 4px solid var(--info); }
+  .card.sev-critical { border-left: 4px solid var(--critical); box-shadow: 0 0 0 1px rgba(255,45,85,0.3) inset; background: rgba(255,45,85,0.06); }
+  .card.sev-high { border-left: 4px solid var(--error); background: rgba(255,107,107,0.05); }
+  .card.sev-medium { border-left: 4px solid var(--warning); }
+  .card.sev-low { border-left: 4px solid var(--info); }
+  .badge {
+    display: inline-block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.03em;
+    padding: 0.15rem 0.5rem; border-radius: 999px; text-transform: uppercase; margin-right: 0.5rem;
+  }
+  .badge.error { background: rgba(255,107,107,0.15); color: var(--error); }
+  .badge.warning { background: rgba(245,196,81,0.15); color: var(--warning); }
+  .badge.info { background: rgba(88,196,240,0.15); color: var(--info); }
+  .badge.good { background: rgba(79,208,138,0.15); color: var(--good); }
+  .badge.critical { background: rgba(255,45,85,0.2); color: var(--critical); }
+  .badge.high { background: rgba(255,107,107,0.18); color: var(--error); }
+  .badge.medium { background: rgba(245,196,81,0.15); color: var(--warning); }
+  .badge.low { background: rgba(88,196,240,0.15); color: var(--info); }
+  .ambiguity .excerpt, .security-card .excerpt {
+    font-style: italic; color: var(--error); background: rgba(255,107,107,0.08);
+    padding: 0.4rem 0.6rem; border-radius: 6px; margin: 0.4rem 0; border-left: 3px solid var(--error);
+  }
+  .security-card.sev-critical .excerpt { color: var(--critical); background: rgba(255,45,85,0.08); border-left-color: var(--critical); }
+  .security-card.sev-medium .excerpt { color: var(--warning); background: rgba(245,196,81,0.08); border-left-color: var(--warning); }
+  .security-card.sev-low .excerpt { color: var(--info); background: rgba(88,196,240,0.08); border-left-color: var(--info); }
+  .ambiguity .fix {
+    color: var(--good); background: rgba(79,208,138,0.08);
+    padding: 0.4rem 0.6rem; border-radius: 6px; border-left: 3px solid var(--good);
+  }
+  .security-banner {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.6rem 0.85rem; border-radius: 8px; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem;
+  }
+  .security-banner.clear { background: rgba(79,208,138,0.1); border: 1px solid var(--good); color: var(--good); }
+  .security-banner.alert { background: rgba(255,45,85,0.12); border: 1px solid var(--critical); color: var(--critical); }
+  .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-bottom: 0.2rem; }
+  pre.source {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #0b0d13;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 0.85rem;
+    max-height: 480px;
+    overflow: auto;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  pre.source mark {
+    color: var(--text);
+    border-radius: 3px;
+    padding: 0 2px;
+    cursor: pointer;
+  }
+  pre.source mark.amb-mark { background: rgba(255, 107, 107, 0.35); }
+  pre.source mark.sec-critical { background: rgba(255, 45, 85, 0.55); }
+  pre.source mark.sec-high { background: rgba(255, 107, 107, 0.45); }
+  pre.source mark.sec-medium { background: rgba(245, 196, 81, 0.4); }
+  pre.source mark.sec-low { background: rgba(88, 196, 240, 0.4); }
+  pre.source mark.active { outline: 2px solid #fff; }
+  table.fm { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+  table.fm td { padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--panel-border); vertical-align: top; }
+  table.fm td:first-child { color: var(--text-dim); width: 35%; }
+  .ref-list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .ref-chip { font-size: 0.75rem; background: #1e2230; border: 1px solid var(--panel-border); padding: 0.2rem 0.55rem; border-radius: 999px; }
+  .empty-state { color: var(--text-dim); font-size: 0.85rem; }
+  .section-title { margin: 1.25rem 0 0.5rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.75rem; }
+  .section-title:first-child { margin-top: 0; }
+  .diagram-header { display: flex; align-items: center; justify-content: space-between; margin: 1.25rem 0 0.5rem; }
+  .diagram-header .section-title { margin: 0; }
+  .diagram-source-label { font-size: 0.7rem; color: var(--text-dim); }
+  .mermaid-wrap {
+    background: #0b0d13;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 1rem;
+    overflow-x: auto;
+    text-align: center;
+  }
+  .mermaid-wrap svg { max-width: 100%; height: auto; }
+  .copy-btn {
+    background: transparent; color: var(--text-dim); border: 1px solid var(--panel-border);
+    border-radius: 6px; padding: 0.3rem 0.65rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; margin-top: 0.5rem;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #0b0d13; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px; margin-right: 0.4rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>SkillScope</h1>
+  <p>Paste or upload a SKILL.md and get a plain-English explanation, flagged ambiguities, and structural lint.</p>
+</header>
+
+<div class="layout" id="layout">
+  <div class="panel" id="inputPanel">
+    <div class="panel-header">
+      <div class="label">SKILL.md content</div>
+      <button id="collapseBtn" class="icon-btn" type="button" title="Collapse">&laquo;</button>
+    </div>
+    <div class="panel-body" id="inputPanelBody">
+      {% if not api_key_configured %}
+      <div class="warn-banner">
+        ANTHROPIC_API_KEY is not set on the server. Structural analysis (including pattern-based
+        security scanning) will still work; semantic analysis (summary, ambiguities, AI-flagged
+        security findings) will be skipped until it's configured.
+      </div>
+      {% endif %}
+      <textarea id="content" placeholder="---&#10;name: my-skill&#10;description: ...&#10;---&#10;&#10;## Instructions&#10;..."></textarea>
+      <div class="controls">
+        <button id="analyzeBtn">Analyze</button>
+        <button id="loadExampleBtn" class="secondary" type="button">Load ambiguous example</button>
+        <label class="checkbox"><input type="checkbox" id="structuralOnly"> Structural only (skip API call)</label>
+        <input type="file" id="fileInput" accept=".md,.markdown,text/markdown,text/plain">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div id="results">
+      <p class="empty-state">Results will appear here after you click Analyze.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({
+  startOnLoad: false,
+  securityLevel: 'strict',
+  theme: 'base',
+  themeVariables: {
+    background: '#0b0d13',
+    primaryColor: '#1e2230',
+    primaryTextColor: '#e6e8ee',
+    primaryBorderColor: '#6d8dff',
+    lineColor: '#6d8dff',
+    secondaryColor: '#171a23',
+    tertiaryColor: '#171a23',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    fontSize: '14px',
+  },
+  flowchart: { curve: 'basis', htmlLabels: true, nodeSpacing: 40, rankSpacing: 55 },
+});
+
+const contentEl = document.getElementById('content');
+const fileInput = document.getElementById('fileInput');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const structuralOnlyEl = document.getElementById('structuralOnly');
+const resultsEl = document.getElementById('results');
+const loadExampleBtn = document.getElementById('loadExampleBtn');
+const layoutEl = document.getElementById('layout');
+const inputPanel = document.getElementById('inputPanel');
+const collapseBtn = document.getElementById('collapseBtn');
+
+const AMBIGUOUS_EXAMPLE = `---
+name: helper
+description: Helps with stuff sometimes
+---
+
+## What this does
+
+This skill might help clean up files if needed. Depending on the situation, you should
+probably run it before or after committing, whichever seems right at the time.
+
+If the user wants formatting, format it, unless they don't, in which case just do the
+normal thing.
+`;
+
+loadExampleBtn.addEventListener('click', () => {
+  contentEl.value = AMBIGUOUS_EXAMPLE;
+});
+
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { contentEl.value = reader.result; };
+  reader.readAsText(file);
+});
+
+function setLeftCollapsed(collapsed) {
+  inputPanel.classList.toggle('collapsed', collapsed);
+  layoutEl.classList.toggle('left-collapsed', collapsed);
+  collapseBtn.innerHTML = collapsed ? '&raquo;' : '&laquo;';
+  collapseBtn.title = collapsed ? 'Expand' : 'Collapse';
+  try { localStorage.setItem('skillscope_left_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+}
+
+collapseBtn.addEventListener('click', () => {
+  setLeftCollapsed(!inputPanel.classList.contains('collapsed'));
+});
+
+(function restoreCollapsedState() {
+  let collapsed = false;
+  try { collapsed = localStorage.getItem('skillscope_left_collapsed') === '1'; } catch (e) {}
+  setLeftCollapsed(collapsed);
+})();
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderHighlightedSource(sourceText, ambiguities, securityFindings) {
+  const spans = [];
+  (ambiguities || []).forEach((a, idx) => {
+    if (!a.excerpt) return;
+    const start = sourceText.indexOf(a.excerpt);
+    if (start === -1) return;
+    spans.push({ start, end: start + a.excerpt.length, kind: 'ambiguity', idx });
+  });
+  (securityFindings || []).forEach((f, idx) => {
+    if (!f.excerpt) return;
+    const start = sourceText.indexOf(f.excerpt);
+    if (start === -1) return;
+    spans.push({ start, end: start + f.excerpt.length, kind: 'security', idx, severity: f.severity });
+  });
+  // Security findings win over ambiguities when they overlap at the same start.
+  spans.sort((a, b) => (a.start - b.start) || (a.kind === 'security' ? -1 : 1));
+
+  const merged = [];
+  for (const s of spans) {
+    if (merged.length && s.start < merged[merged.length - 1].end) continue;
+    merged.push(s);
+  }
+
+  let out = '';
+  let cursor = 0;
+  for (const s of merged) {
+    out += escapeHtml(sourceText.slice(cursor, s.start));
+    const cls = s.kind === 'security' ? `sec-mark sec-${s.severity}` : 'amb-mark';
+    const id = s.kind === 'security' ? `secmark-${s.idx}` : `mark-${s.idx}`;
+    out += `<mark class="${cls}" id="${id}">${escapeHtml(sourceText.slice(s.start, s.end))}</mark>`;
+    cursor = s.end;
+  }
+  out += escapeHtml(sourceText.slice(cursor));
+  return out;
+}
+
+function severityBadge(sev) {
+  const label = { error: 'Structural error', warning: 'Structural warning', info: 'Info' }[sev] || sev;
+  return `<span class="badge ${sev}">${label}</span>`;
+}
+
+function secSeverityBadge(sev) {
+  const label = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' }[sev] || sev;
+  return `<span class="badge ${sev}">${label}</span>`;
+}
+
+const SEC_CATEGORY_LABELS = {
+  remote_code_execution: 'Remote code execution',
+  destructive_command: 'Destructive command',
+  credential_access: 'Credential access',
+  data_exfiltration: 'Data exfiltration',
+  prompt_injection: 'Prompt injection',
+  obfuscation: 'Obfuscation',
+  privilege_escalation: 'Privilege escalation',
+  persistence: 'Persistence',
+  other: 'Other',
+};
+
+function renderSecuritySection(findings) {
+  const hasSevere = findings.some(f => f.severity === 'critical' || f.severity === 'high');
+  let html = '<div class="section-title">Security findings</div>';
+
+  if (!findings || findings.length === 0) {
+    html += '<div class="security-banner clear">No malicious content, intent, or suspicious scripts detected.</div>';
+    return html;
+  }
+
+  html += `<div class="security-banner alert">${findings.length} security finding${findings.length === 1 ? '' : 's'} flagged${hasSevere ? ' — review before trusting this skill' : ''}.</div>`;
+
+  findings.forEach((f, idx) => {
+    const categoryLabel = SEC_CATEGORY_LABELS[f.category] || escapeHtml(f.category || 'other');
+    html += `
+      <div class="card security-card sev-${f.severity}" data-idx="${idx}">
+        <h3>${secSeverityBadge(f.severity)}${categoryLabel}</h3>
+        <div>${escapeHtml(f.issue || '')}</div>
+        <div class="excerpt">&ldquo;${escapeHtml(f.excerpt || '')}&rdquo;</div>
+      </div>`;
+  });
+
+  return html;
+}
+
+let flowDiagramCounter = 0;
+
+function renderFlowDiagram(flowDiagram, source) {
+  if (!flowDiagram) {
+    return `
+      <div class="diagram-header"><div class="section-title">Flow diagram</div></div>
+      <div class="card"><span class="badge info">N/A</span>No step-by-step flow was identified for this skill.</div>`;
+  }
+
+  const sourceLabel = source === 'ai' ? 'AI-generated (includes decision branches)' : 'auto-generated from a numbered list';
+  const diagramId = `flowDiagram${++flowDiagramCounter}`;
+
+  return `
+    <div class="diagram-header">
+      <div class="section-title">Flow diagram</div>
+      <span class="diagram-source-label">${escapeHtml(sourceLabel)}</span>
+    </div>
+    <div class="mermaid-wrap"><pre class="mermaid" id="${diagramId}">${escapeHtml(flowDiagram)}</pre></div>
+    <button class="copy-btn" type="button" data-diagram-source="${diagramId}-src">Copy Mermaid source</button>
+    <textarea id="${diagramId}-src" style="position:absolute; left:-9999px;">${escapeHtml(flowDiagram)}</textarea>`;
+}
+
+function render(result) {
+  const parts = [];
+  const securityFindings = result.security_findings || [];
+
+  parts.push(renderSecuritySection(securityFindings));
+
+  if (result.frontmatter && Object.keys(result.frontmatter).length) {
+    const rows = Object.entries(result.frontmatter)
+      .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(String(v))}</td></tr>`)
+      .join('');
+    parts.push(`<div class="section-title">Frontmatter</div><table class="fm">${rows}</table>`);
+  }
+
+  parts.push('<div class="section-title">Structural warnings</div>');
+  const warnings = result.structural_warnings || [];
+  if (warnings.length === 0) {
+    parts.push('<div class="card severity-info"><span class="badge good">Clean</span>No structural issues found.</div>');
+  } else {
+    warnings.forEach(w => {
+      parts.push(`<div class="card severity-${w.severity}">${severityBadge(w.severity)}${escapeHtml(w.message)}</div>`);
+    });
+  }
+
+  if (result.references && result.references.length) {
+    const chips = result.references
+      .map(r => `<span class="ref-chip">${escapeHtml(r.kind)}: ${escapeHtml(r.value)}</span>`)
+      .join('');
+    parts.push(`<div class="section-title">References (${result.references.length})</div><div class="ref-list">${chips}</div>`);
+  }
+
+  parts.push(renderFlowDiagram(result.flow_diagram, result.flow_diagram_source));
+
+  if (result.semantic_error) {
+    parts.push(`<div class="section-title">Semantic analysis</div><div class="card severity-warning">${escapeHtml(result.semantic_error)}</div>`);
+  } else {
+    if (result.summary) {
+      parts.push(`<div class="section-title">Summary</div><div class="card">${escapeHtml(result.summary)}</div>`);
+    }
+    if (result.trigger_conditions) {
+      parts.push(`<div class="section-title">When it should trigger</div><div class="card">${escapeHtml(result.trigger_conditions)}</div>`);
+    }
+
+    parts.push('<div class="section-title">Ambiguities</div>');
+    const ambiguities = result.ambiguities || [];
+    if (ambiguities.length === 0) {
+      parts.push('<div class="card"><span class="badge good">Clear</span>No ambiguous or conflicting wording flagged.</div>');
+    } else {
+      ambiguities.forEach((a, idx) => {
+        parts.push(`
+          <div class="card ambiguity severity-warning" data-idx="${idx}">
+            <h3>Ambiguity #${idx + 1}</h3>
+            <div class="excerpt">&ldquo;${escapeHtml(a.excerpt)}&rdquo;</div>
+            <div><strong>Issue:</strong> ${escapeHtml(a.issue)}</div>
+            <div class="label" style="margin-top:0.5rem;">Suggested fix</div>
+            <div class="fix">${escapeHtml(a.suggested_fix)}</div>
+          </div>`);
+      });
+    }
+  }
+
+  if (result.source_content) {
+    const highlighted = renderHighlightedSource(result.source_content, result.ambiguities || [], securityFindings);
+    parts.push(`<div class="section-title">Original content (flagged excerpts highlighted)</div><pre class="source">${highlighted}</pre>`);
+  }
+
+  resultsEl.innerHTML = parts.join('\n');
+
+  resultsEl.querySelectorAll('.ambiguity').forEach(card => {
+    card.addEventListener('mouseenter', () => {
+      const mark = resultsEl.querySelector(`#mark-${card.dataset.idx}`);
+      if (mark) mark.classList.add('active');
+    });
+    card.addEventListener('mouseleave', () => {
+      const mark = resultsEl.querySelector(`#mark-${card.dataset.idx}`);
+      if (mark) mark.classList.remove('active');
+    });
+  });
+
+  resultsEl.querySelectorAll('.security-card').forEach(card => {
+    card.addEventListener('mouseenter', () => {
+      const mark = resultsEl.querySelector(`#secmark-${card.dataset.idx}`);
+      if (mark) mark.classList.add('active');
+    });
+    card.addEventListener('mouseleave', () => {
+      const mark = resultsEl.querySelector(`#secmark-${card.dataset.idx}`);
+      if (mark) mark.classList.remove('active');
+    });
+  });
+
+  resultsEl.querySelectorAll('.copy-btn[data-diagram-source]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const srcEl = document.getElementById(btn.dataset.diagramSource);
+      if (!srcEl) return;
+      const text = srcEl.value;
+      const original = btn.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        srcEl.style.position = 'static';
+        srcEl.select();
+        try { document.execCommand('copy'); } catch (e2) {}
+        srcEl.style.position = 'absolute';
+        srcEl.style.left = '-9999px';
+      }
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    });
+  });
+
+  resultsEl.querySelectorAll('pre.mermaid').forEach(el => {
+    mermaid.run({ nodes: [el] }).catch(err => {
+      el.parentElement.outerHTML = `<div class="card severity-warning">Could not render flow diagram: ${escapeHtml(String(err && err.message || err))}</div>`;
+    });
+  });
+}
+
+async function analyze() {
+  const content = contentEl.value;
+  if (!content.trim()) {
+    resultsEl.innerHTML = '<p class="empty-state">Paste or upload a SKILL.md first.</p>';
+    return;
+  }
+  analyzeBtn.disabled = true;
+  const originalLabel = analyzeBtn.textContent;
+  analyzeBtn.innerHTML = '<span class="spinner"></span>Analyzing…';
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, structural_only: structuralOnlyEl.checked }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      resultsEl.innerHTML = `<div class="card severity-error">${escapeHtml(data.error || 'Analysis failed.')}</div>`;
+      return;
+    }
+    render(data);
+  } catch (err) {
+    resultsEl.innerHTML = `<div class="card severity-error">Request failed: ${escapeHtml(String(err))}</div>`;
+  } finally {
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = originalLabel;
+  }
+}
+
+analyzeBtn.addEventListener('click', analyze);
+</script>
+</body>
+</html>

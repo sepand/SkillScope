@@ -34,6 +34,7 @@ FILES = [
     "core/rules.py",
     "core/unicode_scan.py",
     "core/frontmatter_advisor.py",
+    "core/platform_profiles.py",
     "core/checklist.py",
 ]
 

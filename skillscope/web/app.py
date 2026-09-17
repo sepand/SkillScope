@@ -12,6 +12,7 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 
+from ..core.analyzer import PROVIDER_ENV_VARS
 from ..core.pipeline import run_analysis
 
 load_dotenv()
@@ -25,7 +26,14 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html", api_key_configured=bool(os.environ.get("ANTHROPIC_API_KEY")))
+        provider_configured = {
+            provider: bool(os.environ.get(env_var)) for provider, env_var in PROVIDER_ENV_VARS.items()
+        }
+        return render_template(
+            "index.html",
+            api_key_configured=provider_configured["anthropic"],
+            provider_configured=provider_configured,
+        )
 
     @app.post("/api/analyze")
     def api_analyze():
@@ -47,11 +55,19 @@ def create_app() -> Flask:
         if content is None or not content.strip():
             return jsonify({"error": "No content provided. Paste a SKILL.md or upload a file."}), 400
 
-        skip_semantic = bool(request.args.get("structural_only")) or bool(
-            (request.get_json(silent=True) or {}).get("structural_only")
-        )
+        json_body = request.get_json(silent=True) or {}
+        skip_semantic = bool(request.args.get("structural_only")) or bool(json_body.get("structural_only"))
 
-        analysis = run_analysis(content, skip_semantic=skip_semantic)
+        provider = json_body.get("provider") or request.args.get("provider") or "anthropic"
+        # provider comes straight from an untrusted request body - request.args values are
+        # always strings, but a JSON body can hand us any type (e.g. {"provider": {}}),
+        # and `in` against a dict raises TypeError for an unhashable value rather than
+        # just returning False. Reject non-strings before the membership check so a
+        # malformed request gets a clean 400, not an unhandled exception.
+        if not isinstance(provider, str) or provider not in PROVIDER_ENV_VARS:
+            return jsonify({"error": f"Unknown provider '{provider}'. Valid options: {', '.join(PROVIDER_ENV_VARS)}."}), 400
+
+        analysis = run_analysis(content, skip_semantic=skip_semantic, provider=provider)
         result = analysis.to_dict()
         result["source_content"] = content
         return jsonify(result)

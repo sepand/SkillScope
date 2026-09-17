@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from rich.console import Console
@@ -12,7 +13,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from .core.pipeline import run_analysis
+from .core.discovery import DiscoveredSkill, discover_skill_dirs
+from .core.pipeline import run_analysis, run_bundle_analysis
 
 load_dotenv()
 
@@ -177,14 +179,107 @@ def render(console: Console, source_label: str, result: dict, flow_out: str | No
         console.print(Panel("No ambiguous or conflicting wording flagged.", border_style="green"))
 
 
+def render_bundle_summary(console: Console, rows: list[tuple[DiscoveredSkill, dict]]) -> None:
+    stable = Table(show_header=True, header_style="bold", box=None)
+    stable.add_column("Skill")
+    stable.add_column("Scope", width=10)
+    stable.add_column("Pass", width=6)
+    stable.add_column("Fail", width=6)
+    stable.add_column("Manual", width=8)
+    stable.add_column("Highest finding", width=16)
+    for discovered, result in rows:
+        checklist = result.get("checklist") or []
+        pass_n = sum(1 for c in checklist if c.get("status") == "pass")
+        fail_n = sum(1 for c in checklist if c.get("status") == "fail")
+        manual_n = sum(1 for c in checklist if c.get("status") == "manual_review")
+        findings = result.get("security_findings") or []
+        highest = findings[0].get("severity", "none") if findings else "none"
+        style = SEC_SEVERITY_STYLE.get(highest, "grey50") if highest != "none" else "green"
+        stable.add_row(
+            Text(str(discovered.skill_dir)), Text(discovered.scope),
+            Text(str(pass_n)), Text(str(fail_n)), Text(str(manual_n)),
+            Text(highest, style=style),
+        )
+    console.print(Panel(
+        stable, title=f"Directory scan summary ({len(rows)} skill(s) found)", border_style="blue",
+    ))
+
+
+def run_directory_mode(console: Console, root: Path, args: argparse.Namespace) -> int:
+    discovered = discover_skill_dirs(root, scope_override=args.scope)
+    if not discovered:
+        console.print(f"[yellow]No SKILL.md files found under {root}[/yellow]")
+        return 0
+
+    if len(discovered) > 1 and args.semantic:
+        console.print(
+            f"[yellow]{len(discovered)} skills found; each skill's (secret-redacted) "
+            "content will be sent to the configured LLM provider for semantic analysis. "
+            "Re-run without --semantic to skip.[/yellow]"
+        )
+
+    fail_severities = FAIL_ON_LEVELS[args.fail_on]
+    exit_code = 0
+    summary_rows: list[tuple[DiscoveredSkill, dict]] = []
+    json_results = []
+
+    for d in discovered:
+        try:
+            analysis = run_bundle_analysis(
+                d.skill_dir, scope=d.scope, skip_semantic=not args.semantic, provider=args.provider,
+            )
+        except (OSError, ValueError) as exc:
+            console.print(f"[bold red]Error reading {d.path}:[/bold red] {exc}")
+            exit_code = 1
+            continue
+
+        result = analysis.to_dict()
+        has_errors = any(w.get("severity") == "error" for w in result.get("structural_warnings") or [])
+        has_severe = any(
+            f.get("severity") in fail_severities for f in result.get("security_findings") or []
+        )
+        if has_errors or has_severe:
+            exit_code = 1
+
+        if args.json:
+            json_results.append({"skill_dir": str(d.skill_dir), "scope": d.scope, "result": result})
+        else:
+            render(console, str(d.path), result, eli5=args.eli5)
+        summary_rows.append((d, result))
+
+    if args.json:
+        print(json.dumps(json_results, indent=2))
+    else:
+        render_bundle_summary(console, summary_rows)
+
+    return exit_code
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="skillscope",
         description="Analyze a SKILL.md file: structural lint plus AI-powered plain-English explanation "
                     "and ambiguity detection.",
     )
-    parser.add_argument("path", help="Path to a SKILL.md file, or '-' to read from stdin.")
+    parser.add_argument("path", help="Path to a SKILL.md file, a directory to scan recursively, or '-' to read from stdin.")
     parser.add_argument("--no-semantic", action="store_true", help="Skip the Claude API call; structural checks only.")
+    parser.add_argument(
+        "--semantic", action="store_true",
+        help="Directory mode only: enable semantic analysis for each discovered skill "
+             "(sends each skill's content to the LLM). Off by default in directory mode, "
+             "since a directory can contain many skills and this has a real API cost.",
+    )
+    parser.add_argument(
+        "--scope", choices=["personal", "project", "plugin", "auto"], default="auto",
+        help="Directory mode only: override the auto-detected scope heuristic "
+             "(personal/project/plugin) for every discovered skill.",
+    )
+    parser.add_argument(
+        "--provider", choices=["anthropic", "gemini", "azure"], default="anthropic",
+        help="LLM provider for semantic analysis (default: anthropic). Reads "
+             "ANTHROPIC_API_KEY / GEMINI_API_KEY / AZURE_OPENAI_API_KEY respectively; "
+             "azure also needs AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT set.",
+    )
     parser.add_argument("--json", action="store_true", help="Print raw JSON instead of a formatted report.")
     parser.add_argument("--flow-out", metavar="PATH", help="Also write the Mermaid flow diagram source to this file (e.g. flow.mmd).")
     parser.add_argument("--eli5", action="store_true", help="Show the dead-simple 'explain like I'm 5' summary instead of the technical one.")
@@ -199,6 +294,9 @@ def main(argv: list[str] | None = None) -> int:
 
     console = Console()
 
+    if args.path != "-" and Path(args.path).is_dir():
+        return run_directory_mode(console, Path(args.path), args)
+
     try:
         content = read_input(args.path)
     except FileNotFoundError:
@@ -208,7 +306,7 @@ def main(argv: list[str] | None = None) -> int:
         console.print(f"[bold red]Error reading file:[/bold red] {exc}")
         return 1
 
-    analysis = run_analysis(content, skip_semantic=args.no_semantic)
+    analysis = run_analysis(content, skip_semantic=args.no_semantic, provider=args.provider)
     result = analysis.to_dict()
 
     has_errors = any(w.get("severity") == "error" for w in result.get("structural_warnings") or [])

@@ -219,11 +219,12 @@
       <button id="collapseBtn" class="icon-btn" type="button" title="Collapse">&laquo;</button>
     </div>
     <div class="panel-body" id="inputPanelBody">
-      {% if not api_key_configured %}
+      {% if not (provider_configured.anthropic or provider_configured.gemini or provider_configured.azure) %}
       <div class="warn-banner">
-        ANTHROPIC_API_KEY is not set on the server. Structural analysis (including pattern-based
-        security scanning) will still work; semantic analysis (summary, ambiguities, AI-flagged
-        security findings) will be skipped until it's configured.
+        No LLM provider is configured on the server (ANTHROPIC_API_KEY / GEMINI_API_KEY /
+        AZURE_OPENAI_API_KEY). Structural analysis (including pattern-based security
+        scanning) will still work; semantic analysis (summary, ambiguities, AI-flagged
+        security findings) will be skipped until one is configured.
       </div>
       {% endif %}
       <textarea id="content" placeholder="---&#10;name: my-skill&#10;description: ...&#10;---&#10;&#10;## Instructions&#10;..."></textarea>
@@ -231,6 +232,13 @@
         <button id="analyzeBtn">Analyze</button>
         <button id="loadExampleBtn" class="secondary" type="button">Load ambiguous example</button>
         <label class="checkbox"><input type="checkbox" id="structuralOnly"> Structural only (skip API call)</label>
+        <label class="checkbox">Provider:
+          <select id="providerSelect">
+            <option value="anthropic" {{ '' if provider_configured.anthropic else 'disabled' }}>Anthropic{{ '' if provider_configured.anthropic else ' (not configured)' }}</option>
+            <option value="gemini" {{ '' if provider_configured.gemini else 'disabled' }}>Gemini{{ '' if provider_configured.gemini else ' (not configured)' }}</option>
+            <option value="azure" {{ '' if provider_configured.azure else 'disabled' }}>Azure AI Foundry{{ '' if provider_configured.azure else ' (not configured)' }}</option>
+          </select>
+        </label>
         <input type="file" id="fileInput" accept=".md,.markdown,text/markdown,text/plain">
       </div>
     </div>
@@ -267,6 +275,7 @@ const contentEl = document.getElementById('content');
 const fileInput = document.getElementById('fileInput');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const structuralOnlyEl = document.getElementById('structuralOnly');
+const providerSelectEl = document.getElementById('providerSelect');
 const resultsEl = document.getElementById('results');
 const loadExampleBtn = document.getElementById('loadExampleBtn');
 const layoutEl = document.getElementById('layout');
@@ -594,7 +603,7 @@ async function analyze() {
     const resp = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, structural_only: structuralOnlyEl.checked }),
+      body: JSON.stringify({ content, structural_only: structuralOnlyEl.checked, provider: providerSelectEl.value }),
     });
     const data = await resp.json();
     if (!resp.ok) {

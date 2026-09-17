@@ -15,7 +15,10 @@ honest stopping point, not a gap to paper over with an invented heuristic.
 
 from __future__ import annotations
 
+import re
+
 from .models import ChecklistResult, StructuralAnalysis
+from .platform_profiles import KNOWN_MANIFEST_FILENAMES, PLATFORM_MANIFESTS
 
 OWASP_AST_STATUS = "OWASP Incubator project, v0.0.0, active development - not a ratified standard."
 OWASP_AST_LICENSE = "Content adapted from OWASP Agentic Skills Top 10, CC-BY-SA-4.0."
@@ -106,3 +109,121 @@ def evaluate_content_checks(structural: StructuralAnalysis) -> list[ChecklistRes
 
     results.sort(key=lambda r: _ORDER[r.id])
     return results
+
+
+def _parse_tool_list(raw) -> set[str]:
+    tokens = raw if isinstance(raw, list) else str(raw).split(",")
+    tools = set()
+    for tok in tokens:
+        name = re.sub(r"\(.*\)", "", str(tok)).strip()
+        if name:
+            tools.add(name.lower())
+    return tools
+
+
+def _declared_tools(frontmatter: dict):
+    """Returns the declared tool/command allowlist, or None if nothing was declared."""
+    permissions = frontmatter.get("permissions")
+    if isinstance(permissions, dict) and permissions.get("tools") is not None:
+        return _parse_tool_list(permissions["tools"])
+    if frontmatter.get("allowed-tools") is not None:
+        return _parse_tool_list(frontmatter["allowed-tools"])
+    return None
+
+
+def _network_denied(frontmatter: dict) -> bool:
+    permissions = frontmatter.get("permissions")
+    if isinstance(permissions, dict):
+        network = permissions.get("network")
+        if isinstance(network, dict) and network.get("deny") == "*":
+            return True
+        if network is False:
+            return True
+    return frontmatter.get("network") is False
+
+
+def evaluate_bundle_checks(bundle, structural: StructuralAnalysis) -> list[ChecklistResult]:
+    """Upgrades the content-only checklist with the risks a directory/bundle view makes
+    decidable. `bundle` is a `core.bundle.SkillBundle` - untyped here to avoid a circular
+    import (bundle.py imports parser.py, which imports this module).
+
+    AST02 (Supply Chain Compromise) deliberately stays `not_applicable` even with a
+    directory view - no registry/provenance data is available from local files alone, and
+    fabricating a "looks like it came from a registry" heuristic would be inventing a
+    detector, not building one. AST06/AST09 are untouched for the same reason: no
+    sandbox-state or org-governance signal exists in a skill's own files, bundle or not.
+    """
+    results = {r.id: r for r in evaluate_content_checks(structural)}
+    frontmatter = structural.frontmatter or {}
+
+    declared_tools = _declared_tools(frontmatter)
+    if declared_tools is None:
+        results["AST03"] = _result(
+            "AST03", "manual_review",
+            "No permissions.tools/allowed-tools declared - nothing to check actual usage against.",
+        )
+    else:
+        undeclared = [t for t in bundle.used_tools if t not in declared_tools]
+        if undeclared:
+            results["AST03"] = _result(
+                "AST03", "fail",
+                f"Bundle uses tool(s)/command(s) not in the declared set: {', '.join(undeclared[:5])}.",
+            )
+        else:
+            results["AST03"] = _result(
+                "AST03", "pass",
+                "All detected tool/command usage across the bundle is within the declared "
+                "permissions.tools/allowed-tools set.",
+            )
+
+    if _network_denied(frontmatter) and bundle.uses_network:
+        results["AST04"] = _result(
+            "AST04", "fail",
+            "Frontmatter declares no network access, but a bundled file makes a network "
+            "call (curl/wget/HTTP request) - this is the exact permission-understating "
+            "example OWASP AST04 gives.",
+        )
+
+    has_version = frontmatter.get("version") is not None
+    has_hash = frontmatter.get("content_hash") is not None
+    if has_version or has_hash:
+        results["AST07"] = _result(
+            "AST07", "pass",
+            "version/content_hash field present (presence-only - not cryptographically verified).",
+        )
+    else:
+        results["AST07"] = _result(
+            "AST07", "manual_review",
+            "No version or content_hash field - nothing to check drift against.",
+        )
+
+    bundle_relpaths = {f.relpath for f in bundle.files}
+    declared_platforms = frontmatter.get("platforms")
+    if isinstance(declared_platforms, list) and declared_platforms:
+        missing = []
+        for platform_name in declared_platforms:
+            manifest = PLATFORM_MANIFESTS.get(str(platform_name).strip().lower())
+            # SKILL.md is always present by definition (it's what got us here) - only a
+            # *second* platform's manifest can meaningfully be "missing".
+            if manifest and manifest != "SKILL.md" and manifest not in bundle_relpaths:
+                missing.append(f"{platform_name} ({manifest})")
+        if missing:
+            results["AST10"] = _result(
+                "AST10", "manual_review",
+                f"Declared platform(s) missing their manifest file in this bundle: "
+                f"{', '.join(missing)} - cross-check that permission/security metadata "
+                "didn't drop when porting to them.",
+            )
+    else:
+        found_manifests = sorted(
+            (bundle_relpaths & KNOWN_MANIFEST_FILENAMES) - {"SKILL.md"}
+        )
+        if found_manifests:
+            results["AST10"] = _result(
+                "AST10", "manual_review",
+                f"Multiple platform manifest(s) found ({', '.join(found_manifests)}) with "
+                "no `platforms` field declared - cross-check permission/security metadata "
+                "for drops between them.",
+            )
+
+    return [results[id_] for id_, _, _ in CHECKLIST_DEFINITIONS]

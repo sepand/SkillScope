@@ -196,46 +196,105 @@ def build_semantic_analysis(data: dict) -> SemanticAnalysis:
     )
 
 
-def analyze_semantic(content: str, structural: StructuralAnalysis, api_key: str | None = None) -> SemanticAnalysis:
-    """Calls the Claude API and returns a SemanticAnalysis. Never raises — API/parsing
-    failures are captured in SemanticAnalysis.error so callers can degrade gracefully."""
+# One entry per supported provider: which env var holds its credential, and what to tell
+# the user to pip-install if the adapter's lazy `import` fails. Each adapter lives in
+# core/providers/ and shares this module's SYSTEM_PROMPT/RESPONSE_TOOL/build_user_prompt/
+# build_semantic_analysis as the single source of truth for what's asked and how the
+# response is validated - adapters differ only in request/response shape, not in content.
+# LiteLLM (a multi-provider abstraction library) was deliberately not adopted here: it
+# suffered a real supply-chain compromise (malicious PyPI versions published after a stolen
+# publishing token, March 2026) - three small hand-written adapters keep the trusted-
+# dependency footprint proportional to what's actually used, matching this project's own
+# supply-chain pinning policy in requirements.txt.
+# Public (no leading underscore) because skillscope/web/app.py also needs this mapping,
+# to report which providers are configured without duplicating the list.
+PROVIDER_ENV_VARS = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "azure": "AZURE_OPENAI_API_KEY",
+}
+_PROVIDER_INSTALL_HINTS = {
+    "anthropic": "pip install anthropic",
+    "gemini": "pip install google-genai",
+    "azure": "pip install openai",
+}
+# Env vars beyond the credential itself that a provider's adapter reads and that
+# shouldn't appear in an error message either - e.g. Azure's resource endpoint and
+# deployment name are read from the environment (see providers/azure_provider.py) and,
+# while not secrets in the same sense as the API key, are still not something an error
+# message needs to echo back to a caller.
+_PROVIDER_SENSITIVE_ENV_VARS = {
+    "anthropic": [],
+    "gemini": [],
+    "azure": ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT"],
+}
 
-    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        return SemanticAnalysis(
-            summary="",
-            trigger_conditions="",
-            ambiguities=[],
-            error="ANTHROPIC_API_KEY is not set. Semantic analysis was skipped; "
-                  "structural results are still shown below.",
-        )
 
-    try:
-        import anthropic
-    except ImportError:
+def _scrub_secrets(text: str, secrets: list[str | None]) -> str:
+    """Strips every literal value in `secrets` out of an error message before it's shown
+    to the user or logged. An HTTP client's exception text can otherwise embed the request
+    that failed - including the key it was authenticating with, or (for Azure) the
+    resource endpoint/deployment name - which would defeat the point of never
+    printing/logging that value (see core/CLAUDE.md)."""
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "[REDACTED]")
+    return text
+
+
+def analyze_semantic(
+    content: str, structural: StructuralAnalysis, api_key: str | None = None, provider: str = "anthropic",
+) -> SemanticAnalysis:
+    """Calls the configured LLM provider and returns a SemanticAnalysis. Never raises —
+    API/parsing/import failures are captured in SemanticAnalysis.error so callers can
+    degrade gracefully. `provider` selects an adapter from core/providers/ (see the module
+    docstring above); the adapter's own SDK import stays deferred inside its `call()`
+    function, exactly like this module's own historical `import anthropic` did, so
+    importing analyzer.py itself never requires any provider's SDK to be installed."""
+
+    if provider not in PROVIDER_ENV_VARS:
         return SemanticAnalysis(
             summary="", trigger_conditions="", ambiguities=[],
-            error="The 'anthropic' package is not installed. Run: pip install -r requirements.txt",
+            error=f"Unknown provider '{provider}'. Valid options: {', '.join(PROVIDER_ENV_VARS)}.",
         )
 
-    try:
-        client = anthropic.Anthropic(api_key=key)
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            tools=[RESPONSE_TOOL],
-            tool_choice={"type": "tool", "name": TOOL_NAME},
-            messages=[{"role": "user", "content": build_user_prompt(content, structural)}],
+    env_var = PROVIDER_ENV_VARS[provider]
+    key = api_key or os.environ.get(env_var)
+    if not key:
+        return SemanticAnalysis(
+            summary="", trigger_conditions="", ambiguities=[],
+            error=f"{env_var} is not set. Semantic analysis was skipped; structural "
+                  "results are still shown below.",
         )
-        tool_use = next((b for b in response.content if getattr(b, "type", None) == "tool_use"), None)
-        if tool_use is None:
-            return SemanticAnalysis(
-                summary="", trigger_conditions="", ambiguities=[],
-                error="Semantic analysis failed: the model did not return a tool call.",
-            )
-        return build_semantic_analysis(tool_use.input)
-    except anthropic.APIError as exc:
-        return SemanticAnalysis(summary="", trigger_conditions="", ambiguities=[], error=f"Anthropic API error: {exc}")
+
+    # Everything that shouldn't end up verbatim in an error message for this provider -
+    # the credential plus any other sensitive env value the adapter reads (e.g. Azure's
+    # endpoint/deployment). Gathered once so every exit path below scrubs consistently,
+    # rather than relying on a per-branch judgment call about which exceptions could or
+    # couldn't possibly carry one of these values.
+    secrets_to_scrub = [key] + [
+        os.environ.get(var) for var in _PROVIDER_SENSITIVE_ENV_VARS.get(provider, [])
+    ]
+
+    try:
+        if provider == "anthropic":
+            from .providers import anthropic_provider as adapter
+        elif provider == "gemini":
+            from .providers import gemini_provider as adapter
+        else:  # "azure" - the only remaining option per the PROVIDER_ENV_VARS check above
+            from .providers import azure_provider as adapter
+        return adapter.call(content, structural, key)
+    except ImportError as exc:
+        return SemanticAnalysis(
+            summary="", trigger_conditions="", ambiguities=[],
+            error=_scrub_secrets(
+                f"Required package for provider '{provider}' is not installed ({exc}). "
+                f"Run: {_PROVIDER_INSTALL_HINTS[provider]}",
+                secrets_to_scrub,
+            ),
+        )
     except Exception as exc:  # noqa: BLE001 - surface any failure to the caller, not a crash
-        return SemanticAnalysis(summary="", trigger_conditions="", ambiguities=[], error=f"Semantic analysis failed: {exc}")
+        return SemanticAnalysis(
+            summary="", trigger_conditions="", ambiguities=[],
+            error=_scrub_secrets(f"Semantic analysis failed ({provider}): {exc}", secrets_to_scrub),
+        )

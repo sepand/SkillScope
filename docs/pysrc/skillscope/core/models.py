@@ -48,6 +48,7 @@ class SecurityFinding:
     issue: str
     source: str = "pattern"  # "pattern" (deterministic scan) | "ai" (semantic analysis)
     citation: str = ""  # research/spec source backing a pattern-sourced finding, if any
+    source_file: str = ""  # relative path within a bundle, for directory-mode findings; "" for single-file mode
 
     def to_dict(self) -> dict:
         return {
@@ -57,6 +58,7 @@ class SecurityFinding:
             "issue": self.issue,
             "source": self.source,
             "citation": self.citation,
+            "source_file": self.source_file,
         }
 
 

@@ -1,0 +1,10 @@
+# Optional: only needed for --provider gemini / --provider azure (the default provider,
+# anthropic, only needs requirements.txt). Kept separate so installing SkillScope doesn't
+# force every user to pull in two extra SDKs they may never use - each provider adapter
+# already imports its SDK lazily (see skillscope/core/providers/) and degrades to a clear
+# "pip install ..." error message if the matching package isn't installed.
+#
+# Same pinning policy as requirements.txt: exact versions, chosen to be at least 14 days
+# old at time of pinning (checked directly against PyPI's release metadata, not guessed).
+google-genai==2.20.0   # for --provider gemini
+openai==3.6.0           # for --provider azure (Azure AI Foundry, via openai's AzureOpenAI client)

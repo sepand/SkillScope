@@ -31,6 +31,10 @@ FILES = [
     "core/security.py",
     "core/flow.py",
     "core/analyzer.py",
+    "core/rules.py",
+    "core/unicode_scan.py",
+    "core/frontmatter_advisor.py",
+    "core/checklist.py",
 ]
 
 

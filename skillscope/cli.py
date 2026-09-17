@@ -22,6 +22,21 @@ SEVERITY_LABEL = {"error": "STRUCTURAL ERROR", "warning": "STRUCTURAL WARNING", 
 SEC_SEVERITY_STYLE = {"critical": "bold white on red", "high": "bold red", "medium": "yellow", "low": "cyan"}
 SEC_BORDER_STYLE = {"critical": "red", "high": "red", "medium": "yellow", "low": "cyan"}
 
+CHECKLIST_STATUS_STYLE = {
+    "pass": "bold green", "fail": "bold red", "manual_review": "yellow", "not_applicable": "grey50",
+}
+CHECKLIST_STATUS_LABEL = {
+    "pass": "PASS", "fail": "FAIL", "manual_review": "MANUAL REVIEW", "not_applicable": "N/A",
+}
+
+# Ordered weakest-to-strongest; --fail-on picks the minimum severity that fails the build.
+FAIL_ON_LEVELS = {
+    "critical": {"critical"},
+    "high": {"critical", "high"},
+    "medium": {"critical", "high", "medium"},
+    "none": set(),
+}
+
 
 def read_input(path: str) -> str:
     if path == "-":
@@ -48,6 +63,31 @@ def render_security_findings(console: Console, findings: list) -> None:
         body.append(f"\"{f.get('excerpt', '')}\"", style="italic")
         title = f"{sev.upper()} - Security Finding"
         console.print(Panel(body, title=title, border_style=SEC_BORDER_STYLE.get(sev, "yellow")))
+
+
+def render_checklist(console: Console, checklist: list) -> None:
+    if not checklist:
+        return
+    ctable = Table(show_header=True, header_style="bold", box=None)
+    ctable.add_column("ID", width=8)
+    ctable.add_column("Title", width=28)
+    ctable.add_column("Status", width=16)
+    ctable.add_column("Evidence")
+    for c in checklist:
+        status = c.get("status", "")
+        style = CHECKLIST_STATUS_STYLE.get(status, "white")
+        label = CHECKLIST_STATUS_LABEL.get(status, status.upper())
+        # Wrap every cell in Text() rather than passing raw strings: "evidence" embeds
+        # verbatim excerpts from the (untrusted) scanned file, and a plain str passed to
+        # add_row() is re-parsed as Rich markup - Text() does not re-parse, matching the
+        # safe pattern already used by render_security_findings() above.
+        ctable.add_row(Text(c.get("id", "")), Text(c.get("title", "")), Text(label, style=style), Text(c.get("evidence", "")))
+    console.print(Panel(
+        ctable,
+        title="OWASP Agentic Skills Top 10 checklist",
+        subtitle="[grey50]OWASP Incubator project, draft/unratified - not a certified standard[/grey50]",
+        border_style="blue",
+    ))
 
 
 def render_flow_diagram(console: Console, flow_diagram: str | None, source: str | None, flow_out: str | None) -> None:
@@ -77,6 +117,7 @@ def render(console: Console, source_label: str, result: dict, flow_out: str | No
     console.print(Panel(f"[bold]{source_label}[/bold]", style="bold blue", expand=False))
 
     render_security_findings(console, result.get("security_findings") or [])
+    render_checklist(console, result.get("checklist") or [])
 
     fm = result.get("frontmatter") or {}
     if fm:
@@ -147,6 +188,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Print raw JSON instead of a formatted report.")
     parser.add_argument("--flow-out", metavar="PATH", help="Also write the Mermaid flow diagram source to this file (e.g. flow.mmd).")
     parser.add_argument("--eli5", action="store_true", help="Show the dead-simple 'explain like I'm 5' summary instead of the technical one.")
+    parser.add_argument(
+        "--fail-on", choices=["critical", "high", "medium", "none"], default="high",
+        help="Minimum security-finding severity that causes a non-zero exit code "
+             "(default: high, matching prior behavior). 'none' disables this check; "
+             "structural errors (e.g. missing name/description) still cause exit 1 "
+             "regardless of this setting.",
+    )
     args = parser.parse_args(argv)
 
     console = Console()
@@ -163,17 +211,19 @@ def main(argv: list[str] | None = None) -> int:
     analysis = run_analysis(content, skip_semantic=args.no_semantic)
     result = analysis.to_dict()
 
+    has_errors = any(w.get("severity") == "error" for w in result.get("structural_warnings") or [])
+    fail_severities = FAIL_ON_LEVELS[args.fail_on]
+    has_severe_security_findings = any(
+        f.get("severity") in fail_severities for f in result.get("security_findings") or []
+    )
+    exit_code = 1 if (has_errors or has_severe_security_findings) else 0
+
     if args.json:
         print(json.dumps(result, indent=2))
-        return 0
+        return exit_code
 
     render(console, args.path, result, flow_out=args.flow_out, eli5=args.eli5)
-
-    has_errors = any(w.get("severity") == "error" for w in result.get("structural_warnings") or [])
-    has_severe_security_findings = any(
-        f.get("severity") in ("critical", "high") for f in result.get("security_findings") or []
-    )
-    return 1 if (has_errors or has_severe_security_findings) else 0
+    return exit_code
 
 
 if __name__ == "__main__":

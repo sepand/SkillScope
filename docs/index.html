@@ -138,6 +138,8 @@
   .badge.high { background: rgba(255,107,107,0.18); color: var(--error); }
   .badge.medium { background: rgba(245,196,81,0.15); color: var(--warning); }
   .badge.low { background: rgba(88,196,240,0.15); color: var(--info); }
+  .badge.manual { background: rgba(245,196,81,0.15); color: var(--warning); }
+  .badge.na { background: rgba(255,255,255,0.08); color: var(--text-dim); }
   .ambiguity .excerpt, .security-card .excerpt {
     font-style: italic; color: var(--error); background: rgba(255,107,107,0.08);
     padding: 0.4rem 0.6rem; border-radius: 6px; margin: 0.4rem 0; border-left: 3px solid var(--error);
@@ -447,6 +449,29 @@ function renderSecuritySection(findings) {
   return html;
 }
 
+const CHECKLIST_STATUS_BADGE = {
+  pass: '<span class="badge good">Pass</span>',
+  fail: '<span class="badge critical">Fail</span>',
+  manual_review: '<span class="badge manual">Manual review</span>',
+  not_applicable: '<span class="badge na">N/A</span>',
+};
+
+function renderChecklistSection(checklist) {
+  if (!checklist || checklist.length === 0) return '';
+  let html = `
+    <div class="section-title">OWASP Agentic Skills Top 10 checklist</div>
+    <div class="empty-state" style="margin-bottom:0.5rem;">OWASP Incubator project, draft/unratified &mdash; not a certified standard.</div>`;
+  checklist.forEach(c => {
+    const badge = CHECKLIST_STATUS_BADGE[c.status] || `<span class="badge na">${escapeHtml(c.status || '')}</span>`;
+    html += `
+      <div class="card">
+        <h3>${badge}${escapeHtml(c.id || '')} &mdash; ${escapeHtml(c.title || '')}</h3>
+        ${c.evidence ? `<div>${escapeHtml(c.evidence)}</div>` : ''}
+      </div>`;
+  });
+  return html;
+}
+
 let flowDiagramCounter = 0;
 
 function renderFlowDiagram(flowDiagram, source) {
@@ -474,6 +499,7 @@ function render(result) {
   const securityFindings = result.security_findings || [];
 
   parts.push(renderSecuritySection(securityFindings));
+  parts.push(renderChecklistSection(result.checklist || []));
 
   if (result.frontmatter && Object.keys(result.frontmatter).length) {
     const rows = Object.entries(result.frontmatter)
@@ -614,6 +640,10 @@ const PY_FILES = [
   "pysrc/skillscope/core/security.py",
   "pysrc/skillscope/core/flow.py",
   "pysrc/skillscope/core/analyzer.py",
+  "pysrc/skillscope/core/rules.py",
+  "pysrc/skillscope/core/unicode_scan.py",
+  "pysrc/skillscope/core/frontmatter_advisor.py",
+  "pysrc/skillscope/core/checklist.py",
 ];
 
 const GLUE_SCRIPT = `

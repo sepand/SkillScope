@@ -52,7 +52,11 @@ skillscope/
     security.py      # deterministic pattern-based security scan
     flow.py            # deterministic fallback Mermaid flow diagram
     analyzer.py          # Claude tool-use call + response validation (ambiguities, security, flow, ELI5)
-    pipeline.py            # combines structural + semantic into one result
+    pipeline.py            # combines structural + semantic into one result; redacts secrets before outbound calls
+    rules.py               # malicious-behavior rule database (OWASP-cited), threat indicators, secret redaction
+    unicode_scan.py         # hidden/invisible Unicode (steganographic injection) scan
+    frontmatter_advisor.py   # Universal Skill Format frontmatter recommendations
+    checklist.py              # OWASP Agentic Skills Top 10 checklist evaluation
   cli.py             # CLI entrypoint (rich, color-coded terminal output)
   web/
     app.py            # Flask app (POST /api/analyze)
@@ -63,8 +67,10 @@ docs/                  # static GitHub Pages demo (no backend)
 scripts/
   sync_pyodide.py      # copies skillscope/core/ into docs/pysrc/ — re-run after editing core logic
 test_skills/
-  well_written/SKILL.md   # a clear, well-scoped example
-  ambiguous/SKILL.md      # deliberately vague/contradictory example
+  well_written/SKILL.md      # a clear, well-scoped example
+  ambiguous/SKILL.md         # deliberately vague/contradictory example
+  hidden_unicode/SKILL.md    # deliberately malicious fixture: real hidden-Unicode payload
+  malicious_patterns/SKILL.md # deliberately malicious fixture: exercises every rules.py pattern
 requirements.txt
 .env.example
 ```
@@ -100,6 +106,10 @@ Options:
 - `--json` — print the raw result as JSON instead of a formatted report.
 - `--flow-out PATH` — also write the Mermaid flow diagram source to a `.mmd` file.
 - `--eli5` — show the dead-simple "explain like I'm 5" summary instead of the technical one.
+- `--fail-on {critical,high,medium,none}` — minimum security-finding severity that causes
+  a non-zero exit code (default `high`, matching the original behavior). `none` disables
+  this check; structural errors (missing `name`/`description`, etc.) still cause exit `1`
+  regardless of this setting.
 - Pass `-` as the path to read from stdin: `cat SKILL.md | python -m skillscope.cli -`.
 
 The terminal can't render a diagram, so the CLI prints the raw Mermaid source in a panel —
@@ -108,15 +118,22 @@ paste it into [mermaid.live](https://mermaid.live) or any Mermaid-aware Markdown
 to a file.
 
 Exit code is `1` if any structural **error**-severity warning was found (e.g. missing
-frontmatter, missing `name`/`description`) or any **critical**/**high**-severity security
-finding was flagged, `0` otherwise — useful for CI linting/gating.
+frontmatter, missing `name`/`description`) or any security finding at or above the
+`--fail-on` threshold (`high` by default) was flagged, `0` otherwise — useful for CI
+linting/gating. This applies identically whether or not `--json` is passed.
 
 Try it against the bundled fixtures:
 
 ```bash
 python -m skillscope.cli test_skills/well_written/SKILL.md
 python -m skillscope.cli test_skills/ambiguous/SKILL.md
+python -m skillscope.cli test_skills/hidden_unicode/SKILL.md --no-semantic
+python -m skillscope.cli test_skills/malicious_patterns/SKILL.md --no-semantic
 ```
+
+`hidden_unicode` and `malicious_patterns` are deliberately malicious fixtures (see
+[Malicious-behavior rule database](#malicious-behavior-rule-database--owasp-checklist)
+below) — both exit `1`; `well_written` and `ambiguous` both exit `0`.
 
 ## Web app usage
 
@@ -195,6 +212,52 @@ python scripts/sync_pyodide.py
 
 before testing or deploying `docs/`, or the demo will run stale logic.
 
+## Malicious-behavior rule database & OWASP checklist
+
+`skillscope/core/rules.py` is a versioned, local, pure-Python database of malicious-skill
+techniques (`RULESET_VERSION`) — not a live external feed. Each rule cites the concrete
+research it's based on (Datadog Security Labs' dynamic-context/over-privileged-frontmatter
+findings, Snyk's ToxicSkills research on hardcoded secrets and combined payload+injection
+patterns, and OWASP AST02 for a runtime-dependency-install check). It covers, on top of the
+original pattern scan in `security.py`:
+
+- Claude Code dynamic-context (`` !`curl ...` ``) command pre-execution
+- Over-broad `allowed-tools: Bash(*)` frontmatter grants
+- Disguised exfiltration (`gh auth token` followed by a `curl -X POST`)
+- Password-protected archive delivery (evades static AV scanning)
+- Hardcoded secrets (AWS-key-shaped and generic `api_key = "..."` assignments)
+- A runtime package-install instruction in prose (outside a documented setup code fence)
+- A low-severity "weak signal" for embedded external URLs (only meaningful combined with
+  other findings)
+- A correlation rule that escalates severity when an obfuscated payload and
+  prompt-injection phrasing both fire on the same file
+
+`skillscope/core/unicode_scan.py` separately flags hidden/invisible Unicode characters
+(zero-width, bidirectional-control, Unicode Tag-block, and variation-selector codepoints)
+that render as nothing to a human but are still tokenized and can be obeyed by an LLM —
+based on a real documented attack that hid a `curl | bash` instruction in Tag-block text.
+
+`skillscope/core/checklist.py` evaluates the file-content-decidable subset of the
+[OWASP Agentic Skills Top 10](https://owasp.github.io/www-project-agentic-skills-top-10/)
+(an **OWASP Incubator project, not a ratified standard** — content CC-BY-SA-4.0,
+reproduced here with attribution) as a pass/fail/manual-review/not-applicable checklist,
+rendered above the frontmatter section in all three interfaces. Several risk categories
+(supply-chain provenance, sandbox isolation, org governance, cross-platform manifest
+diffing) are honestly `not_applicable` from a single file's content alone — they need a
+directory/bundle view or external data this version of SkillScope doesn't have.
+
+`skillscope/core/frontmatter_advisor.py` recommends (as `info`-severity structural
+warnings, never auto-applied) missing high-value fields from OWASP's draft
+["Universal Skill Format" proposal](https://raw.githubusercontent.com/OWASP/www-project-agentic-skills-top-10/main/universal-skill-format.md):
+`permissions.network`/`.shell`/`.tools`, `platforms`, `risk_tier`, `author.identity`, and
+`content_hash`/`signature` (presence-only — SkillScope does not verify a signature).
+
+Before any content is sent to a third-party LLM for semantic analysis, detected hardcoded
+secrets are redacted from the outbound copy (`skillscope/core/rules.py::redact_secrets`,
+wired in via `skillscope/core/pipeline.py`) — the file you see locally is untouched; only
+the API request is redacted, so the scanner that flags a leaked credential can't itself
+leak it further.
+
 ## Output shape
 
 All three interfaces produce the same underlying JSON:
@@ -207,7 +270,18 @@ All three interfaces produce the same underlying JSON:
       "category": "remote_code_execution|destructive_command|credential_access|data_exfiltration|prompt_injection|obfuscation|privilege_escalation|persistence|other",
       "excerpt": "verbatim quote from the file",
       "issue": "why this is concerning",
-      "source": "pattern|ai"
+      "source": "pattern|ai",
+      "citation": "research/spec source backing a pattern-sourced finding, or empty string"
+    }
+  ],
+  "checklist": [
+    {
+      "id": "AST01",
+      "title": "Malicious Skills",
+      "status": "pass|fail|not_applicable|manual_review",
+      "severity": "critical|high|medium",
+      "evidence": "...",
+      "citation": "https://owasp.github.io/www-project-agentic-skills-top-10/top10"
     }
   ],
   "flow_diagram": "raw Mermaid flowchart source, or null",

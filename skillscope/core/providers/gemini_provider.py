@@ -27,7 +27,8 @@ _FUNCTION_DECLARATION = {
     "parameters": analyzer.RESPONSE_TOOL["input_schema"],
 }
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-2.5-pro"  # reasoning-tier model, not "flash" - matches the analysis
+# depth of Anthropic's default (analyzer.py's MODEL) rather than the faster/lighter tier.
 
 
 def call(content: str, structural: StructuralAnalysis, credential: str) -> SemanticAnalysis:

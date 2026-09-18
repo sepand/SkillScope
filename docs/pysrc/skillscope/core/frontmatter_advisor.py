@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from .frontmatter_fix import suggest_field_snippet
 from .models import StructuralWarning
 
 _USF_CITATION = (
@@ -41,7 +42,12 @@ def recommend_frontmatter(frontmatter: dict) -> list[StructuralWarning]:
     warnings: list[StructuralWarning] = []
 
     def recommend(field_path: str, message: str) -> None:
-        warnings.append(StructuralWarning(severity="info", message=message, field=field_path))
+        warnings.append(StructuralWarning(
+            severity="info",
+            message=message,
+            field=field_path,
+            suggested_yaml=suggest_field_snippet(field_path, frontmatter),
+        ))
 
     if _get(frontmatter, "permissions", "network") is None:
         recommend(

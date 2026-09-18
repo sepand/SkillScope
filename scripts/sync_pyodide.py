@@ -23,6 +23,15 @@ DEST_ROOT = REPO_ROOT / "docs" / "pysrc" / "skillscope"
 # native dependencies. analyzer.py's `import anthropic` is deferred inside a function we
 # never call from the browser (the browser calls the Anthropic API directly via fetch),
 # so analyzer.py loads fine without the anthropic package installed.
+#
+# safe_fs.py/discovery.py/bundle.py/pipeline.py were previously excluded here (see git
+# history) on the reasoning that directory scanning "needs real filesystem access" the
+# static demo doesn't have. That reasoning no longer holds: Pyodide's in-memory filesystem
+# (MEMFS) *is* a real filesystem once the folder-upload feature writes into it (see
+# docs/index.html's runFolderAnalysis()), so these four are pure pathlib/stdlib code that
+# works unmodified once files actually exist under Pyodide's FS. Don't re-exclude them
+# without updating this comment - the exclusion was a missing-input problem, not a
+# Pyodide-compatibility one.
 FILES = [
     "__init__.py",
     "core/__init__.py",
@@ -34,8 +43,13 @@ FILES = [
     "core/rules.py",
     "core/unicode_scan.py",
     "core/frontmatter_advisor.py",
+    "core/frontmatter_fix.py",
     "core/platform_profiles.py",
     "core/checklist.py",
+    "core/safe_fs.py",
+    "core/discovery.py",
+    "core/bundle.py",
+    "core/pipeline.py",
 ]
 
 

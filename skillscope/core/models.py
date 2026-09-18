@@ -11,9 +11,15 @@ class StructuralWarning:
     severity: str  # "error" | "warning" | "info"
     message: str
     field: Optional[str] = None
+    suggested_yaml: str = ""  # copy-pasteable YAML snippet for `field`, if any (frontmatter_fix.py)
 
     def to_dict(self) -> dict:
-        return {"severity": self.severity, "message": self.message, "field": self.field}
+        return {
+            "severity": self.severity,
+            "message": self.message,
+            "field": self.field,
+            "suggested_yaml": self.suggested_yaml,
+        }
 
 
 @dataclass
@@ -142,6 +148,23 @@ class SemanticAnalysis:
             "security_findings": [f.to_dict() for f in self.security_findings],
             "flow_diagram": self.flow_diagram,
             "error": self.error,
+        }
+
+
+@dataclass
+class FrontmatterFixResult:
+    """Output of frontmatter_fix.build_corrected_skill_md() - a whole corrected file,
+    never written back to the user's original path (see core/frontmatter_fix.py)."""
+
+    content: str = ""
+    applied_fields: list[str] = field(default_factory=list)
+    unmerged_fields: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "content": self.content,
+            "applied_fields": self.applied_fields,
+            "unmerged_fields": self.unmerged_fields,
         }
 
 

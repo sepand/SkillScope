@@ -7,6 +7,7 @@ Flask app rather than a pure client-side HTML file.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -134,7 +135,17 @@ def create_app() -> Flask:
         provider = request.form.get("provider") or "anthropic"
         if not isinstance(provider, str) or provider not in PROVIDER_ENV_VARS:
             return jsonify({"error": f"Unknown provider '{provider}'. Valid options: {', '.join(PROVIDER_ENV_VARS)}."}), 400
-        run_semantic = request.form.get("semantic") == "true"
+
+        # Per-skill opt-in: the client sends the exact set of skill_relpath values (each
+        # skill's SKILL.md path relative to the upload root, e.g. "SKILL.md" or
+        # "clean_bundle/SKILL.md") it wants semantic analysis run for - everything else in
+        # the batch stays structural-only. Malformed/missing input degrades to "nothing
+        # selected" (the existing safe default), never to "everything selected".
+        try:
+            semantic_skills_raw = json.loads(request.form.get("semantic_skills", "[]"))
+            semantic_skills = {s for s in semantic_skills_raw if isinstance(s, str)} if isinstance(semantic_skills_raw, list) else set()
+        except (ValueError, TypeError):
+            semantic_skills = set()
 
         temp_root = Path(tempfile.mkdtemp(prefix="skillscope-folder-")).resolve()
         try:
@@ -172,11 +183,13 @@ def create_app() -> Flask:
 
             skills = []
             for d in discovered:
+                skill_relpath = str(d.path.relative_to(temp_root)).replace("\\", "/")
+                run_semantic = skill_relpath in semantic_skills
                 analysis = run_bundle_analysis(
                     d.skill_dir, scope=d.scope, skip_semantic=not run_semantic, provider=provider,
                 )
                 result = analysis.to_dict()
-                result["skill_relpath"] = str(d.path.relative_to(temp_root)).replace("\\", "/")
+                result["skill_relpath"] = skill_relpath
                 result["scope"] = d.scope
                 result["source_content"] = analysis.skill_analysis.raw_content
                 skills.append(result)

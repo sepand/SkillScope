@@ -125,6 +125,11 @@
   .mode-btn.active { background: var(--accent); color: #0b0d13; border-color: var(--accent); }
   .folder-skill-card { cursor: pointer; }
   .folder-consent-note { font-size: 0.75rem; color: var(--text-dim); margin: 0.3rem 0 0; }
+  .folder-skill-list {
+    max-height: 160px; overflow-y: auto; border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: 0.4rem 0.6rem; margin: 0.3rem 0 0.75rem; background: #0b0d13;
+  }
+  .folder-skill-list label.checkbox { padding: 0.15rem 0; font-size: 0.82rem; }
   .warn-banner {
     background: #2a1f10; border: 1px solid var(--warning); color: var(--warning);
     padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.8rem; margin-bottom: 0.75rem;
@@ -309,10 +314,21 @@
         <div class="controls">
           <input type="file" id="folderInput" webkitdirectory directory multiple>
         </div>
+
+        <div id="folderSkillSelector" style="display:none;">
+          <div class="label" style="display:flex; align-items:center; justify-content:space-between;">
+            <span>Run semantic analysis for:</span>
+            <span>
+              <button type="button" id="selectAllSkillsBtn" class="secondary" style="padding:0.2rem 0.55rem; font-size:0.72rem;">All</button>
+              <button type="button" id="selectNoneSkillsBtn" class="secondary" style="padding:0.2rem 0.55rem; font-size:0.72rem;">None</button>
+            </span>
+          </div>
+          <div id="folderSkillList" class="folder-skill-list"></div>
+        </div>
+
         <div class="controls">
           <button id="analyzeFolderBtn" type="button">Analyze folder</button>
           <button id="stopAnalyzeFolderBtn" class="secondary" type="button" style="display:none;">Stop</button>
-          <label class="checkbox"><input type="checkbox" id="folderStructuralOnly" checked> Structural only (skip API call)</label>
           <label class="checkbox">Provider:
             <select id="folderProviderSelect">
               <option value="anthropic" {{ '' if provider_configured.anthropic else 'disabled' }}>Anthropic{{ '' if provider_configured.anthropic else ' (not configured)' }}</option>
@@ -381,8 +397,11 @@ const folderInput = document.getElementById('folderInput');
 const analyzeFolderBtn = document.getElementById('analyzeFolderBtn');
 const stopAnalyzeFolderBtn = document.getElementById('stopAnalyzeFolderBtn');
 const folderProviderSelectEl = document.getElementById('folderProviderSelect');
-const folderStructuralOnlyEl = document.getElementById('folderStructuralOnly');
 const folderConsentNote = document.getElementById('folderConsentNote');
+const folderSkillSelector = document.getElementById('folderSkillSelector');
+const folderSkillList = document.getElementById('folderSkillList');
+const selectAllSkillsBtn = document.getElementById('selectAllSkillsBtn');
+const selectNoneSkillsBtn = document.getElementById('selectNoneSkillsBtn');
 
 function setMode(mode) {
   const isFolder = mode === 'folder';
@@ -402,19 +421,71 @@ function switchMode(mode) {
 modeSingleBtn.addEventListener('click', () => switchMode('single'));
 modeFolderBtn.addEventListener('click', () => switchMode('folder'));
 
+// Client-side approximation of discovery.py's discover_skill_dirs() - just enough to
+// pre-populate the per-skill semantic-analysis picker before the folder is even uploaded.
+// The server's discover_skill_dirs() (safe_fs.py-backed, symlink-safe) stays the sole
+// authority on what's actually scanned; this only decides what's offered as a checkbox, so
+// an imprecise match here is harmless - a selected path the server doesn't discover just
+// does nothing.
+const FOLDER_EXCLUDED_DIR_NAMES = new Set(['.git', 'node_modules', '.venv', 'venv', '__pycache__', 'dist', 'build', '.tox']);
+
+function discoverSkillPathsFromFiles(files) {
+  const paths = [];
+  for (const file of files) {
+    const relpath = (file.webkitRelativePath || file.name).replace(/\\/g, '/');
+    const parts = relpath.split('/');
+    if (parts[parts.length - 1] !== 'SKILL.md') continue;
+    if (parts.slice(0, -1).some(p => FOLDER_EXCLUDED_DIR_NAMES.has(p))) continue;
+    paths.push(relpath);
+  }
+  return Array.from(new Set(paths)).sort();
+}
+
+function renderFolderSkillSelector() {
+  const files = folderInput.files;
+  const skillPaths = files && files.length ? discoverSkillPathsFromFiles(files) : [];
+  if (!skillPaths.length) {
+    folderSkillSelector.style.display = 'none';
+    folderSkillList.innerHTML = '';
+    return;
+  }
+  folderSkillSelector.style.display = '';
+  folderSkillList.innerHTML = skillPaths.map(p => `
+    <label class="checkbox"><input type="checkbox" class="folder-skill-checkbox" value="${escapeHtml(p)}"> ${escapeHtml(p)}</label>`
+  ).join('');
+}
+
+function getSelectedSemanticSkills() {
+  return Array.from(document.querySelectorAll('.folder-skill-checkbox:checked')).map(cb => cb.value).sort();
+}
+
 function updateFolderConsentNote() {
   const count = (folderInput.files || []).length;
-  const semantic = !folderStructuralOnlyEl.checked;
   if (!count) {
     folderConsentNote.textContent = '';
     return;
   }
-  folderConsentNote.textContent = semantic
-    ? `${count} file(s) selected. Each discovered skill's SKILL.md content will be sent to ${folderProviderSelectEl.value} for semantic analysis - bundled scripts/resources are never sent, only pattern/Unicode-scanned locally.`
-    : `${count} file(s) selected. Structural/security scanning only - nothing leaves this machine unless you uncheck "Structural only".`;
+  const selected = getSelectedSemanticSkills();
+  folderConsentNote.textContent = selected.length
+    ? `${count} file(s) selected. ${selected.length} skill(s) will have their SKILL.md content sent to ${folderProviderSelectEl.value} for semantic analysis - bundled scripts/resources are never sent, only pattern/Unicode-scanned locally. The rest get structural/security scanning only.`
+    : `${count} file(s) selected. Structural/security scanning only - check a skill above to also run semantic analysis on it.`;
 }
-folderInput.addEventListener('change', updateFolderConsentNote);
-folderStructuralOnlyEl.addEventListener('change', updateFolderConsentNote);
+
+folderInput.addEventListener('change', () => {
+  renderFolderSkillSelector();
+  updateFolderConsentNote();
+});
+folderSkillList.addEventListener('change', (e) => {
+  if (e.target.classList.contains('folder-skill-checkbox')) updateFolderConsentNote();
+});
+selectAllSkillsBtn.addEventListener('click', () => {
+  document.querySelectorAll('.folder-skill-checkbox').forEach(cb => { cb.checked = true; });
+  updateFolderConsentNote();
+});
+selectNoneSkillsBtn.addEventListener('click', () => {
+  document.querySelectorAll('.folder-skill-checkbox').forEach(cb => { cb.checked = false; });
+  updateFolderConsentNote();
+});
 folderProviderSelectEl.addEventListener('change', updateFolderConsentNote);
 
 const AMBIGUOUS_EXAMPLE = `---
@@ -1259,9 +1330,9 @@ async function analyzeFolder(forceRefresh = false) {
   stopAnalyzeFolderBtn.disabled = false;
   try {
     const provider = folderProviderSelectEl.value;
-    const semantic = !folderStructuralOnlyEl.checked;
+    const semanticSkills = getSelectedSemanticSkills();
     const signature = await computeFolderSignature(files);
-    const cacheKeyParts = { kind: 'folder', signature, provider, semantic };
+    const cacheKeyParts = { kind: 'folder', signature, provider, semanticSkills };
 
     if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -1279,7 +1350,7 @@ async function analyzeFolder(forceRefresh = false) {
       formData.append('files', file, file.webkitRelativePath || file.name);
     }
     formData.append('provider', provider);
-    formData.append('semantic', semantic ? 'true' : 'false');
+    formData.append('semantic_skills', JSON.stringify(semanticSkills));
 
     const resp = await fetch('/api/analyze-folder', { method: 'POST', body: formData, signal: controller.signal });
     const data = await resp.json();
@@ -1289,8 +1360,11 @@ async function analyzeFolder(forceRefresh = false) {
       return;
     }
     renderFolderRollup(data.skills || []);
-    // Same reasoning as analyze(): don't pin a semantic failure in any skill of the batch.
-    const anySemanticFailure = semantic && (data.skills || []).some(s => s.semantic_error);
+    // Same reasoning as analyze(): don't pin a semantic failure for any skill that was
+    // actually asked for semantic analysis - only those, since a skill that wasn't selected
+    // always carries the harmless "not run" placeholder in its own semantic_error field.
+    const semanticSkillSet = new Set(semanticSkills);
+    const anySemanticFailure = (data.skills || []).some(s => semanticSkillSet.has(s.skill_relpath) && s.semantic_error);
     if (!anySemanticFailure) {
       setCachedAnalysis(cacheKeyParts, data);
     }

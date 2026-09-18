@@ -11,9 +11,15 @@ class StructuralWarning:
     severity: str  # "error" | "warning" | "info"
     message: str
     field: Optional[str] = None
+    suggested_yaml: str = ""  # copy-pasteable YAML snippet for `field`, if any (frontmatter_fix.py)
 
     def to_dict(self) -> dict:
-        return {"severity": self.severity, "message": self.message, "field": self.field}
+        return {
+            "severity": self.severity,
+            "message": self.message,
+            "field": self.field,
+            "suggested_yaml": self.suggested_yaml,
+        }
 
 
 @dataclass
@@ -47,6 +53,8 @@ class SecurityFinding:
     excerpt: str
     issue: str
     source: str = "pattern"  # "pattern" (deterministic scan) | "ai" (semantic analysis)
+    citation: str = ""  # research/spec source backing a pattern-sourced finding, if any
+    source_file: str = ""  # relative path within a bundle, for directory-mode findings; "" for single-file mode
 
     def to_dict(self) -> dict:
         return {
@@ -55,6 +63,34 @@ class SecurityFinding:
             "excerpt": self.excerpt,
             "issue": self.issue,
             "source": self.source,
+            "citation": self.citation,
+            "source_file": self.source_file,
+        }
+
+
+@dataclass
+class ChecklistResult:
+    """One row of the OWASP Agentic Skills Top 10 checklist (see core/checklist.py).
+
+    SecurityFinding can't express "AST03: pass" - this is a separate, coarser model for
+    per-risk-category status rather than individual flagged excerpts.
+    """
+
+    id: str  # e.g. "AST01"
+    title: str
+    status: str  # "pass" | "fail" | "not_applicable" | "manual_review"
+    severity: str  # the risk's default severity (critical/high/medium), not a finding severity
+    evidence: str = ""
+    citation: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "status": self.status,
+            "severity": self.severity,
+            "evidence": self.evidence,
+            "citation": self.citation,
         }
 
 
@@ -68,6 +104,7 @@ class StructuralAnalysis:
     warnings: list[StructuralWarning] = field(default_factory=list)
     security_findings: list[SecurityFinding] = field(default_factory=list)
     flow_diagram: Optional[str] = None
+    checklist: list[ChecklistResult] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -78,6 +115,7 @@ class StructuralAnalysis:
             "warnings": [w.to_dict() for w in self.warnings],
             "security_findings": [f.to_dict() for f in self.security_findings],
             "flow_diagram": self.flow_diagram,
+            "checklist": [c.to_dict() for c in self.checklist],
         }
 
 
@@ -110,6 +148,23 @@ class SemanticAnalysis:
             "security_findings": [f.to_dict() for f in self.security_findings],
             "flow_diagram": self.flow_diagram,
             "error": self.error,
+        }
+
+
+@dataclass
+class FrontmatterFixResult:
+    """Output of frontmatter_fix.build_corrected_skill_md() - a whole corrected file,
+    never written back to the user's original path (see core/frontmatter_fix.py)."""
+
+    content: str = ""
+    applied_fields: list[str] = field(default_factory=list)
+    unmerged_fields: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "content": self.content,
+            "applied_fields": self.applied_fields,
+            "unmerged_fields": self.unmerged_fields,
         }
 
 
@@ -159,4 +214,5 @@ class SkillAnalysis:
             "frontmatter_error": self.structural.frontmatter_error,
             "sections": [s.to_dict() for s in self.structural.sections],
             "references": [r.to_dict() for r in self.structural.references],
+            "checklist": [c.to_dict() for c in self.structural.checklist],
         }

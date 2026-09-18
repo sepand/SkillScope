@@ -12,9 +12,13 @@ import re
 
 import yaml
 
+from .checklist import evaluate_content_checks
 from .flow import build_fallback_diagram
+from .frontmatter_advisor import recommend_frontmatter
 from .models import Reference, Section, StructuralAnalysis, StructuralWarning
+from .rules import scan_threat_indicators
 from .security import scan as scan_security
+from .unicode_scan import scan_hidden_unicode
 
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?\n)---\s*\n?", re.DOTALL)
 HEADER_RE = re.compile(r"^(#{1,6})\s+(.*)$", re.MULTILINE)
@@ -210,10 +214,13 @@ def parse_skill(content: str) -> StructuralAnalysis:
     sections = extract_sections(body)
     references = extract_references(body)
     warnings = lint(frontmatter, frontmatter_error, body)
+    warnings.extend(recommend_frontmatter(frontmatter))
     security_findings = scan_security(content)
+    security_findings.extend(scan_hidden_unicode(content))
+    security_findings.extend(scan_threat_indicators(content, frontmatter))
     flow_diagram = build_fallback_diagram(body)
 
-    return StructuralAnalysis(
+    structural = StructuralAnalysis(
         frontmatter=frontmatter,
         frontmatter_error=frontmatter_error,
         body=body,
@@ -223,3 +230,5 @@ def parse_skill(content: str) -> StructuralAnalysis:
         security_findings=security_findings,
         flow_diagram=flow_diagram,
     )
+    structural.checklist = evaluate_content_checks(structural)
+    return structural

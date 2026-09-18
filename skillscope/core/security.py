@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 
+from . import rules
 from .models import SEVERITY_RANK, SecurityFinding
 
 # (category, severity, pattern, explanation)
@@ -104,7 +105,14 @@ _MAX_EXCERPT_LEN = 200
 
 
 def scan(content: str) -> list[SecurityFinding]:
-    """Scans raw SKILL.md content (frontmatter + body) for suspicious patterns."""
+    """Scans raw SKILL.md content (frontmatter + body) for suspicious patterns.
+
+    Merges this module's original inline patterns with the `core/rules.py` malicious-
+    behavior database (dynamic-context execution, over-privileged frontmatter, disguised
+    exfiltration, password-protected archives, hardcoded secrets, runtime dependency
+    installs, a low-severity weak-signal check, and a combined-payload/injection
+    correlation) - see `rules.py` for citations behind each addition.
+    """
     findings: list[SecurityFinding] = []
     seen: set[tuple[str, str]] = set()
 
@@ -120,6 +128,10 @@ def scan(content: str) -> list[SecurityFinding]:
             findings.append(SecurityFinding(
                 severity=severity, category=category, excerpt=excerpt, issue=explanation, source="pattern",
             ))
+
+    findings.extend(rules.scan_malicious_patterns(content))
+    findings.extend(rules.scan_weak_signals(content))
+    findings.extend(rules.check_combined_payload_injection(findings))
 
     findings.sort(key=lambda f: SEVERITY_RANK.get(f.severity, 9))
     return findings

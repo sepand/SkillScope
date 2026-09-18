@@ -24,6 +24,8 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
+    font-size: 15px;
+    line-height: 1.6;
   }
   header {
     padding: 1.25rem 1.5rem;
@@ -40,12 +42,23 @@
     gap: 1rem;
     padding: 1.25rem;
     align-items: start;
-    transition: grid-template-columns 0.15s ease;
   }
-  .layout.left-collapsed { grid-template-columns: 44px 1fr; }
   @media (max-width: 900px) {
-    .layout, .layout.left-collapsed { grid-template-columns: 1fr; }
+    .layout { grid-template-columns: 1fr; }
   }
+  .left-column {
+    position: sticky;
+    top: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .left-column.input-expanded { position: static; }
+  @media (max-width: 900px) {
+    .left-column { position: static; }
+  }
+  #sourcePanel { display: none; }
+  #sourcePanel pre.source { max-height: min(480px, calc(100vh - 9rem)); }
   .panel {
     background: var(--panel);
     border: 1px solid var(--panel-border);
@@ -59,6 +72,8 @@
     margin-bottom: 0.6rem;
   }
   .panel-header .label { margin-bottom: 0; }
+  .panel-header-actions { display: flex; align-items: center; gap: 0.4rem; }
+  .panel-header-actions button.secondary { padding: 0.3rem 0.6rem; font-size: 0.75rem; }
   .icon-btn {
     background: transparent;
     color: var(--text-dim);
@@ -73,13 +88,12 @@
     flex: none;
   }
   .icon-btn:hover { color: var(--text); border-color: var(--accent); }
-  #inputPanel.collapsed { padding: 0.6rem 0.45rem; }
-  #inputPanel.collapsed .panel-header { margin-bottom: 0; justify-content: center; }
-  #inputPanel.collapsed .panel-header .label { display: none; }
+  #inputPanel.collapsed { padding: 0.6rem 0.9rem; }
+  #inputPanel.collapsed .panel-header { margin-bottom: 0; justify-content: space-between; }
   #inputPanel.collapsed .panel-body { display: none; }
   textarea {
     width: 100%;
-    min-height: 380px;
+    min-height: 220px;
     background: #0b0d13;
     color: var(--text);
     border: 1px solid var(--panel-border);
@@ -103,12 +117,35 @@
   button.secondary { background: transparent; color: var(--text); border: 1px solid var(--panel-border); }
   label.checkbox { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); }
   input[type="file"] { color: var(--text-dim); font-size: 0.8rem; }
+  .mode-toggle { display: flex; gap: 0.4rem; margin-bottom: 0.75rem; }
+  .mode-btn {
+    background: transparent; color: var(--text-dim); border: 1px solid var(--panel-border);
+    border-radius: 6px; padding: 0.4rem 0.85rem; font-weight: 600; font-size: 0.85rem; cursor: pointer;
+  }
+  .mode-btn.active { background: var(--accent); color: #0b0d13; border-color: var(--accent); }
+  .folder-skill-card { cursor: pointer; }
+  .folder-consent-note { font-size: 0.75rem; color: var(--text-dim); margin: 0.3rem 0 0; }
+  .folder-skill-list {
+    max-height: 160px; overflow-y: auto; border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: 0.4rem 0.6rem; margin: 0.3rem 0 0.75rem; background: #0b0d13;
+  }
+  .folder-skill-list label.checkbox { padding: 0.15rem 0; font-size: 0.82rem; }
   .warn-banner {
     background: #2a1f10; border: 1px solid var(--warning); color: var(--warning);
     padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.8rem; margin-bottom: 0.75rem;
   }
-  .card { border: 1px solid var(--panel-border); border-radius: 8px; padding: 0.85rem; margin-bottom: 0.75rem; }
-  .card h3 { margin: 0 0 0.5rem 0; font-size: 0.95rem; }
+  .card { border: 1px solid var(--panel-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; line-height: 1.6; }
+  .card.cache-badge { border-left: 4px solid var(--accent); display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+  .card h3 { margin: 0 0 0.5rem 0; font-size: 1rem; line-height: 1.35; }
+  .stats-bar { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.25rem; }
+  .stat-tile { flex: 1 1 110px; background: #0b0d13; border: 1px solid var(--panel-border); border-radius: 8px; padding: 0.65rem 0.8rem; }
+  .stat-tile .stat-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+  .stat-tile .stat-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.25rem; }
+  .stat-tile.tone-critical .stat-value { color: var(--critical); }
+  .stat-tile.tone-warning .stat-value { color: var(--warning); }
+  .stat-tile.tone-good .stat-value { color: var(--good); }
+  .severity-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 0.7rem; background: #0b0d13; }
+  .severity-bar > div { transition: flex 0.2s ease; }
   .card.severity-error { border-left: 4px solid var(--error); }
   .card.severity-warning { border-left: 4px solid var(--warning); }
   .card.severity-info { border-left: 4px solid var(--info); }
@@ -128,6 +165,8 @@
   .badge.high { background: rgba(255,107,107,0.18); color: var(--error); }
   .badge.medium { background: rgba(245,196,81,0.15); color: var(--warning); }
   .badge.low { background: rgba(88,196,240,0.15); color: var(--info); }
+  .badge.manual { background: rgba(245,196,81,0.15); color: var(--warning); }
+  .badge.na { background: rgba(255,255,255,0.08); color: var(--text-dim); }
   .ambiguity .excerpt, .security-card .excerpt {
     font-style: italic; color: var(--error); background: rgba(255,107,107,0.08);
     padding: 0.4rem 0.6rem; border-radius: 6px; margin: 0.4rem 0; border-left: 3px solid var(--error);
@@ -135,9 +174,15 @@
   .security-card.sev-critical .excerpt { color: var(--critical); background: rgba(255,45,85,0.08); border-left-color: var(--critical); }
   .security-card.sev-medium .excerpt { color: var(--warning); background: rgba(245,196,81,0.08); border-left-color: var(--warning); }
   .security-card.sev-low .excerpt { color: var(--info); background: rgba(88,196,240,0.08); border-left-color: var(--info); }
-  .ambiguity .fix {
+  .fix {
     color: var(--good); background: rgba(79,208,138,0.08);
     padding: 0.4rem 0.6rem; border-radius: 6px; border-left: 3px solid var(--good);
+  }
+  .fix-yaml {
+    color: var(--good); background: rgba(79,208,138,0.08);
+    padding: 0.4rem 0.6rem; border-radius: 6px; border-left: 3px solid var(--good);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; margin-top: 0.35rem;
   }
   .security-banner {
     display: flex; align-items: center; gap: 0.5rem;
@@ -155,8 +200,8 @@
     padding: 0.85rem;
     max-height: 480px;
     overflow: auto;
-    font-size: 0.8rem;
-    line-height: 1.5;
+    font-size: 0.82rem;
+    line-height: 1.7;
   }
   pre.source mark {
     color: var(--text);
@@ -170,13 +215,25 @@
   pre.source mark.sec-medium { background: rgba(245, 196, 81, 0.4); }
   pre.source mark.sec-low { background: rgba(88, 196, 240, 0.4); }
   pre.source mark.active { outline: 2px solid #fff; }
+  .security-card.locatable, .ambiguity.locatable { cursor: pointer; }
+  .locate-hint { font-size: 0.72rem; color: var(--text-dim); margin-top: 0.4rem; }
+  .locate-hint.unavailable { font-style: italic; }
+  .related-findings-link {
+    display: inline-block; margin-top: 0.4rem; font-size: 0.78rem;
+    color: var(--info); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline;
+  }
+  @keyframes pulse-highlight {
+    0%, 100% { box-shadow: none; }
+    30% { box-shadow: 0 0 0 3px var(--info); }
+  }
+  .card.pulse { animation: pulse-highlight 1s ease; }
   table.fm { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
   table.fm td { padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--panel-border); vertical-align: top; }
   table.fm td:first-child { color: var(--text-dim); width: 35%; }
   .ref-list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .ref-chip { font-size: 0.75rem; background: #1e2230; border: 1px solid var(--panel-border); padding: 0.2rem 0.55rem; border-radius: 999px; }
   .empty-state { color: var(--text-dim); font-size: 0.85rem; }
-  .section-title { margin: 1.25rem 0 0.5rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.75rem; }
+  .section-title { margin: 1.75rem 0 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.75rem; font-weight: 600; }
   .section-title:first-child { margin-top: 0; }
   .diagram-header { display: flex; align-items: center; justify-content: space-between; margin: 1.25rem 0 0.5rem; }
   .diagram-header .section-title { margin: 0; }
@@ -211,27 +268,84 @@
 </header>
 
 <div class="layout" id="layout">
+  <div class="left-column" id="leftColumn">
   <div class="panel" id="inputPanel">
     <div class="panel-header">
       <div class="label">SKILL.md content</div>
-      <button id="collapseBtn" class="icon-btn" type="button" title="Collapse">&laquo;</button>
+      <div class="panel-header-actions">
+        <button id="historyBtn" class="secondary" type="button">History</button>
+        <button id="collapseBtn" class="icon-btn" type="button" title="Collapse">&laquo;</button>
+      </div>
     </div>
     <div class="panel-body" id="inputPanelBody">
-      {% if not api_key_configured %}
+      {% if not (provider_configured.anthropic or provider_configured.gemini or provider_configured.azure) %}
       <div class="warn-banner">
-        ANTHROPIC_API_KEY is not set on the server. Structural analysis (including pattern-based
-        security scanning) will still work; semantic analysis (summary, ambiguities, AI-flagged
-        security findings) will be skipped until it's configured.
+        No LLM provider is configured on the server (ANTHROPIC_API_KEY / GEMINI_API_KEY /
+        AZURE_OPENAI_API_KEY). Structural analysis (including pattern-based security
+        scanning) will still work; semantic analysis (summary, ambiguities, AI-flagged
+        security findings) will be skipped until one is configured.
       </div>
       {% endif %}
-      <textarea id="content" placeholder="---&#10;name: my-skill&#10;description: ...&#10;---&#10;&#10;## Instructions&#10;..."></textarea>
-      <div class="controls">
-        <button id="analyzeBtn">Analyze</button>
-        <button id="loadExampleBtn" class="secondary" type="button">Load ambiguous example</button>
-        <label class="checkbox"><input type="checkbox" id="structuralOnly"> Structural only (skip API call)</label>
-        <input type="file" id="fileInput" accept=".md,.markdown,text/markdown,text/plain">
+      <div class="mode-toggle">
+        <button type="button" id="modeSingleBtn" class="mode-btn active">Single file</button>
+        <button type="button" id="modeFolderBtn" class="mode-btn">Folder</button>
+      </div>
+
+      <div id="singleModePanel">
+        <textarea id="content" placeholder="---&#10;name: my-skill&#10;description: ...&#10;---&#10;&#10;## Instructions&#10;..."></textarea>
+        <div class="controls">
+          <button id="analyzeBtn">Analyze</button>
+          <button id="stopAnalyzeBtn" class="secondary" type="button" style="display:none;">Stop</button>
+          <label class="checkbox"><input type="checkbox" id="structuralOnly"> Structural only (skip API call)</label>
+          <button id="loadExampleBtn" class="secondary" type="button">Load ambiguous example</button>
+          <label class="checkbox">Provider:
+            <select id="providerSelect">
+              <option value="anthropic" {{ '' if provider_configured.anthropic else 'disabled' }}>Anthropic{{ '' if provider_configured.anthropic else ' (not configured)' }}</option>
+              <option value="gemini" {{ '' if provider_configured.gemini else 'disabled' }}>Gemini{{ '' if provider_configured.gemini else ' (not configured)' }}</option>
+              <option value="azure" {{ '' if provider_configured.azure else 'disabled' }}>Azure AI Foundry{{ '' if provider_configured.azure else ' (not configured)' }}</option>
+            </select>
+          </label>
+          <input type="file" id="fileInput" accept=".md,.markdown,text/markdown,text/plain">
+        </div>
+      </div>
+
+      <div id="folderModePanel" style="display:none;">
+        <p class="empty-state">Select a folder containing one or more skills (each with its own SKILL.md, anywhere in the tree, including nested).</p>
+        <div class="controls">
+          <input type="file" id="folderInput" webkitdirectory directory multiple>
+        </div>
+
+        <div id="folderSkillSelector" style="display:none;">
+          <div class="label" style="display:flex; align-items:center; justify-content:space-between;">
+            <span>Run semantic analysis for:</span>
+            <span>
+              <button type="button" id="selectAllSkillsBtn" class="secondary" style="padding:0.2rem 0.55rem; font-size:0.72rem;">All</button>
+              <button type="button" id="selectNoneSkillsBtn" class="secondary" style="padding:0.2rem 0.55rem; font-size:0.72rem;">None</button>
+            </span>
+          </div>
+          <div id="folderSkillList" class="folder-skill-list"></div>
+        </div>
+
+        <div class="controls">
+          <button id="analyzeFolderBtn" type="button">Analyze folder</button>
+          <button id="stopAnalyzeFolderBtn" class="secondary" type="button" style="display:none;">Stop</button>
+          <label class="checkbox">Provider:
+            <select id="folderProviderSelect">
+              <option value="anthropic" {{ '' if provider_configured.anthropic else 'disabled' }}>Anthropic{{ '' if provider_configured.anthropic else ' (not configured)' }}</option>
+              <option value="gemini" {{ '' if provider_configured.gemini else 'disabled' }}>Gemini{{ '' if provider_configured.gemini else ' (not configured)' }}</option>
+              <option value="azure" {{ '' if provider_configured.azure else 'disabled' }}>Azure AI Foundry{{ '' if provider_configured.azure else ' (not configured)' }}</option>
+            </select>
+          </label>
+        </div>
+        <p class="folder-consent-note" id="folderConsentNote"></p>
       </div>
     </div>
+  </div>
+
+  <div class="panel" id="sourcePanel">
+    <div class="section-title">Original content (flagged excerpts highlighted)</div>
+    <pre class="source" id="sourceView"></pre>
+  </div>
   </div>
 
   <div class="panel">
@@ -264,12 +378,115 @@ mermaid.initialize({
 const contentEl = document.getElementById('content');
 const fileInput = document.getElementById('fileInput');
 const analyzeBtn = document.getElementById('analyzeBtn');
+const stopAnalyzeBtn = document.getElementById('stopAnalyzeBtn');
 const structuralOnlyEl = document.getElementById('structuralOnly');
+const providerSelectEl = document.getElementById('providerSelect');
 const resultsEl = document.getElementById('results');
 const loadExampleBtn = document.getElementById('loadExampleBtn');
-const layoutEl = document.getElementById('layout');
+const leftColumnEl = document.getElementById('leftColumn');
 const inputPanel = document.getElementById('inputPanel');
 const collapseBtn = document.getElementById('collapseBtn');
+const historyBtn = document.getElementById('historyBtn');
+let currentAnalyzeController = null;
+
+const modeSingleBtn = document.getElementById('modeSingleBtn');
+const modeFolderBtn = document.getElementById('modeFolderBtn');
+const singleModePanel = document.getElementById('singleModePanel');
+const folderModePanel = document.getElementById('folderModePanel');
+const folderInput = document.getElementById('folderInput');
+const analyzeFolderBtn = document.getElementById('analyzeFolderBtn');
+const stopAnalyzeFolderBtn = document.getElementById('stopAnalyzeFolderBtn');
+const folderProviderSelectEl = document.getElementById('folderProviderSelect');
+const folderConsentNote = document.getElementById('folderConsentNote');
+const folderSkillSelector = document.getElementById('folderSkillSelector');
+const folderSkillList = document.getElementById('folderSkillList');
+const selectAllSkillsBtn = document.getElementById('selectAllSkillsBtn');
+const selectNoneSkillsBtn = document.getElementById('selectNoneSkillsBtn');
+
+function setMode(mode) {
+  const isFolder = mode === 'folder';
+  modeSingleBtn.classList.toggle('active', !isFolder);
+  modeFolderBtn.classList.toggle('active', isFolder);
+  singleModePanel.style.display = isFolder ? 'none' : '';
+  folderModePanel.style.display = isFolder ? '' : 'none';
+}
+function switchMode(mode) {
+  setMode(mode);
+  // A manual mode switch starts fresh - otherwise a stale single-file source view (or a
+  // stale folder rollup) stays on screen next to controls for the mode you just switched
+  // to, which reads as showing results for content that isn't even selected anymore.
+  clearSourcePanel();
+  resultsEl.innerHTML = '<p class="empty-state">Results will appear here after you click Analyze.</p>';
+}
+modeSingleBtn.addEventListener('click', () => switchMode('single'));
+modeFolderBtn.addEventListener('click', () => switchMode('folder'));
+
+// Client-side approximation of discovery.py's discover_skill_dirs() - just enough to
+// pre-populate the per-skill semantic-analysis picker before the folder is even uploaded.
+// The server's discover_skill_dirs() (safe_fs.py-backed, symlink-safe) stays the sole
+// authority on what's actually scanned; this only decides what's offered as a checkbox, so
+// an imprecise match here is harmless - a selected path the server doesn't discover just
+// does nothing.
+const FOLDER_EXCLUDED_DIR_NAMES = new Set(['.git', 'node_modules', '.venv', 'venv', '__pycache__', 'dist', 'build', '.tox']);
+
+function discoverSkillPathsFromFiles(files) {
+  const paths = [];
+  for (const file of files) {
+    const relpath = (file.webkitRelativePath || file.name).replace(/\\/g, '/');
+    const parts = relpath.split('/');
+    if (parts[parts.length - 1] !== 'SKILL.md') continue;
+    if (parts.slice(0, -1).some(p => FOLDER_EXCLUDED_DIR_NAMES.has(p))) continue;
+    paths.push(relpath);
+  }
+  return Array.from(new Set(paths)).sort();
+}
+
+function renderFolderSkillSelector() {
+  const files = folderInput.files;
+  const skillPaths = files && files.length ? discoverSkillPathsFromFiles(files) : [];
+  if (!skillPaths.length) {
+    folderSkillSelector.style.display = 'none';
+    folderSkillList.innerHTML = '';
+    return;
+  }
+  folderSkillSelector.style.display = '';
+  folderSkillList.innerHTML = skillPaths.map(p => `
+    <label class="checkbox"><input type="checkbox" class="folder-skill-checkbox" value="${escapeHtml(p)}"> ${escapeHtml(p)}</label>`
+  ).join('');
+}
+
+function getSelectedSemanticSkills() {
+  return Array.from(document.querySelectorAll('.folder-skill-checkbox:checked')).map(cb => cb.value).sort();
+}
+
+function updateFolderConsentNote() {
+  const count = (folderInput.files || []).length;
+  if (!count) {
+    folderConsentNote.textContent = '';
+    return;
+  }
+  const selected = getSelectedSemanticSkills();
+  folderConsentNote.textContent = selected.length
+    ? `${count} file(s) selected. ${selected.length} skill(s) will have their SKILL.md content sent to ${folderProviderSelectEl.value} for semantic analysis - bundled scripts/resources are never sent, only pattern/Unicode-scanned locally. The rest get structural/security scanning only.`
+    : `${count} file(s) selected. Structural/security scanning only - check a skill above to also run semantic analysis on it.`;
+}
+
+folderInput.addEventListener('change', () => {
+  renderFolderSkillSelector();
+  updateFolderConsentNote();
+});
+folderSkillList.addEventListener('change', (e) => {
+  if (e.target.classList.contains('folder-skill-checkbox')) updateFolderConsentNote();
+});
+selectAllSkillsBtn.addEventListener('click', () => {
+  document.querySelectorAll('.folder-skill-checkbox').forEach(cb => { cb.checked = true; });
+  updateFolderConsentNote();
+});
+selectNoneSkillsBtn.addEventListener('click', () => {
+  document.querySelectorAll('.folder-skill-checkbox').forEach(cb => { cb.checked = false; });
+  updateFolderConsentNote();
+});
+folderProviderSelectEl.addEventListener('change', updateFolderConsentNote);
 
 const AMBIGUOUS_EXAMPLE = `---
 name: helper
@@ -297,12 +514,19 @@ fileInput.addEventListener('change', () => {
   reader.readAsText(file);
 });
 
-function setLeftCollapsed(collapsed) {
+function setLeftCollapsed(collapsed, persist = true) {
   inputPanel.classList.toggle('collapsed', collapsed);
-  layoutEl.classList.toggle('left-collapsed', collapsed);
+  leftColumnEl.classList.toggle('input-expanded', !collapsed);
   collapseBtn.innerHTML = collapsed ? '&raquo;' : '&laquo;';
   collapseBtn.title = collapsed ? 'Expand' : 'Collapse';
-  try { localStorage.setItem('skillscope_left_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+  if (persist) {
+    try { localStorage.setItem('skillscope_left_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+  }
+}
+
+function clearSourcePanel() {
+  document.getElementById('sourceView').innerHTML = '';
+  document.getElementById('sourcePanel').style.display = 'none';
 }
 
 collapseBtn.addEventListener('click', () => {
@@ -318,6 +542,182 @@ collapseBtn.addEventListener('click', () => {
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// Client-side, content-addressed analysis cache (localStorage) - lets switching back to a
+// skill you already analyzed (or closing/reopening the tab) reuse the prior result instead
+// of re-spending LLM tokens. Keyed by a SHA-256 hash of exactly what determines the
+// result (content + provider/mode flags), so any change to the input is automatically a
+// cache miss - no manual invalidation logic needed. Never stores API keys, only a boolean
+// flag for whether one was present (see analyze()) - the key value itself never enters the
+// hash input or the cache.
+const ANALYSIS_CACHE_KEY = 'skillscope_analysis_cache';
+const ANALYSIS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const ANALYSIS_CACHE_MAX_ENTRIES = 30;
+
+async function sha256Hex(text) {
+  const buf = new TextEncoder().encode(text);
+  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function loadAnalysisCache() {
+  try {
+    const raw = localStorage.getItem(ANALYSIS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+
+function pruneAnalysisCache(cache) {
+  const now = Date.now();
+  const fresh = Object.entries(cache).filter(([, v]) => now - v.savedAt < ANALYSIS_CACHE_TTL_MS);
+  fresh.sort((a, b) => b[1].savedAt - a[1].savedAt);
+  return Object.fromEntries(fresh.slice(0, ANALYSIS_CACHE_MAX_ENTRIES));
+}
+
+function saveAnalysisCache(cache) {
+  try { localStorage.setItem(ANALYSIS_CACHE_KEY, JSON.stringify(cache)); } catch (e) {
+    // Best-effort only (quota exceeded, private browsing, etc.) - caching is a convenience,
+    // never required for the app to function.
+  }
+}
+
+async function getCachedAnalysis(keyParts) {
+  const key = await sha256Hex(JSON.stringify(keyParts));
+  const cache = pruneAnalysisCache(loadAnalysisCache());
+  const entry = cache[key];
+  return entry ? { result: entry.result, savedAt: entry.savedAt } : null;
+}
+
+// Small, display-only summary stored alongside a cache entry so the history panel can
+// list entries without re-parsing each full result.
+function computeCacheMeta(keyParts, result) {
+  if (keyParts.kind === 'folder') {
+    const skills = result.skills || [];
+    const findingsCount = skills.reduce((sum, s) => sum + (s.security_findings || []).length, 0);
+    const failCount = skills.filter(s => (s.checklist || []).some(c => c.status === 'fail')).length;
+    return { kind: 'folder', label: `Folder (${skills.length} skill${skills.length === 1 ? '' : 's'})`, findingsCount, failCount };
+  }
+  const name = result.frontmatter && result.frontmatter.name;
+  const findingsCount = (result.security_findings || []).length;
+  const failCount = (result.checklist || []).filter(c => c.status === 'fail').length;
+  return { kind: 'single', label: name ? String(name) : 'Untitled skill', findingsCount, failCount };
+}
+
+async function setCachedAnalysis(keyParts, result) {
+  const key = await sha256Hex(JSON.stringify(keyParts));
+  let cache = pruneAnalysisCache(loadAnalysisCache());
+  cache[key] = { savedAt: Date.now(), result, meta: computeCacheMeta(keyParts, result) };
+  cache = pruneAnalysisCache(cache);
+  saveAnalysisCache(cache);
+}
+
+function formatCacheAge(savedAt) {
+  const seconds = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function renderCacheBadge(cacheInfo, reanalyzeBtnId) {
+  if (!cacheInfo || !cacheInfo.fromCache) return '';
+  return `
+    <div class="card cache-badge">
+      <div>&#9889; Loaded from cache &middot; analyzed ${formatCacheAge(cacheInfo.cachedAt)}</div>
+      <button type="button" id="${reanalyzeBtnId}" class="secondary">Re-analyze</button>
+    </div>`;
+}
+
+// Per-file content hash for a folder upload, sorted by relative path so selection order
+// never affects the cache key. Reading each File via arrayBuffer() here doesn't consume or
+// alter it - the same File object is still appended to the real upload afterward.
+async function computeFolderSignature(files) {
+  const entries = await Promise.all(Array.from(files).map(async file => {
+    const buf = await file.arrayBuffer();
+    const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+    const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return [file.webkitRelativePath || file.name, hashHex];
+  }));
+  entries.sort((a, b) => a[0].localeCompare(b[0]));
+  return entries;
+}
+
+function renderHistoryPanel() {
+  clearSourcePanel();
+  const cache = pruneAnalysisCache(loadAnalysisCache());
+  saveAnalysisCache(cache); // persist any TTL/count pruning immediately, not just on next write
+  const entries = Object.entries(cache).sort((a, b) => b[1].savedAt - a[1].savedAt);
+
+  const parts = [`
+    <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
+      <span>Analysis history (${entries.length})</span>
+      ${entries.length ? '<button type="button" id="clearHistoryBtn" class="secondary">Clear all</button>' : ''}
+    </div>`];
+
+  if (entries.length === 0) {
+    parts.push('<p class="empty-state">No cached analyses yet - results are cached here automatically after each Analyze, so switching between skills (or closing and reopening this tab) can reuse them without spending tokens again.</p>');
+  } else {
+    entries.forEach(([key, entry]) => {
+      const meta = entry.meta || { kind: 'single', label: 'Untitled skill', findingsCount: 0, failCount: 0 };
+      const icon = meta.kind === 'folder' ? '&#128193;' : '&#128196;';
+      parts.push(`
+        <div class="card folder-skill-card" data-cache-key="${escapeHtml(key)}">
+          <h3>${icon} ${escapeHtml(meta.label)}</h3>
+          <div class="label">Analyzed ${formatCacheAge(entry.savedAt)}</div>
+          <div style="margin-top:0.4rem;">
+            <span class="badge ${meta.findingsCount ? 'warning' : 'good'}">${meta.findingsCount} finding${meta.findingsCount === 1 ? '' : 's'}</span>
+            ${meta.failCount ? `<span class="badge critical">${meta.failCount} checklist fail${meta.failCount === 1 ? '' : 's'}</span>` : ''}
+          </div>
+          <button type="button" class="secondary history-remove-btn" data-cache-key="${escapeHtml(key)}" style="margin-top:0.6rem;">Remove</button>
+        </div>`);
+    });
+  }
+
+  resultsEl.innerHTML = parts.join('\n');
+
+  const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+  if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener('click', () => {
+      saveAnalysisCache({});
+      renderHistoryPanel();
+    });
+  }
+
+  resultsEl.querySelectorAll('.history-remove-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const c = loadAnalysisCache();
+      delete c[btn.dataset.cacheKey];
+      saveAnalysisCache(c);
+      renderHistoryPanel();
+    });
+  });
+
+  resultsEl.querySelectorAll('.folder-skill-card[data-cache-key]').forEach(card => {
+    card.addEventListener('click', () => loadFromHistory(card.dataset.cacheKey));
+  });
+}
+
+function loadFromHistory(key) {
+  const cache = loadAnalysisCache();
+  const entry = cache[key];
+  if (!entry) return;
+  const meta = entry.meta || { kind: 'single' };
+  if (meta.kind === 'folder') {
+    setMode('folder');
+    renderFolderRollup(entry.result.skills || [], { fromCache: true, cachedAt: entry.savedAt });
+  } else {
+    setMode('single');
+    if (entry.result.source_content) contentEl.value = entry.result.source_content;
+    render(entry.result, { fromCache: true, cachedAt: entry.savedAt });
+    setLeftCollapsed(true, false);
+  }
+}
+
+historyBtn.addEventListener('click', renderHistoryPanel);
 
 function renderHighlightedSource(sourceText, ambiguities, securityFindings) {
   const spans = [];
@@ -342,6 +742,12 @@ function renderHighlightedSource(sourceText, ambiguities, securityFindings) {
     merged.push(s);
   }
 
+  // Findings/ambiguities whose excerpt couldn't be located (indexOf miss) or whose span
+  // was dropped by the overlap-merge above get no <mark> - callers use these sets to show
+  // an honest "location not found" state instead of a dead click.
+  const foundSecurity = new Set();
+  const foundAmbiguity = new Set();
+
   let out = '';
   let cursor = 0;
   for (const s of merged) {
@@ -350,9 +756,10 @@ function renderHighlightedSource(sourceText, ambiguities, securityFindings) {
     const id = s.kind === 'security' ? `secmark-${s.idx}` : `mark-${s.idx}`;
     out += `<mark class="${cls}" id="${id}">${escapeHtml(sourceText.slice(s.start, s.end))}</mark>`;
     cursor = s.end;
+    (s.kind === 'security' ? foundSecurity : foundAmbiguity).add(s.idx);
   }
   out += escapeHtml(sourceText.slice(cursor));
-  return out;
+  return { html: out, foundSecurity, foundAmbiguity };
 }
 
 function severityBadge(sev) {
@@ -377,7 +784,8 @@ const SEC_CATEGORY_LABELS = {
   other: 'Other',
 };
 
-function renderSecuritySection(findings) {
+function renderSecuritySection(findings, foundSecurity) {
+  foundSecurity = foundSecurity || new Set();
   const hasSevere = findings.some(f => f.severity === 'critical' || f.severity === 'high');
   let html = '<div class="section-title">Security findings</div>';
 
@@ -390,15 +798,108 @@ function renderSecuritySection(findings) {
 
   findings.forEach((f, idx) => {
     const categoryLabel = SEC_CATEGORY_LABELS[f.category] || escapeHtml(f.category || 'other');
+    const located = foundSecurity.has(idx);
+    const hint = f.excerpt
+      ? (located
+          ? '<div class="locate-hint">Click to jump to this in the source below</div>'
+          : '<div class="locate-hint unavailable">Excerpt not found in the source view below</div>')
+      : '';
     html += `
-      <div class="card security-card sev-${f.severity}" data-idx="${idx}">
+      <div class="card security-card sev-${f.severity}${located ? ' locatable' : ''}" data-idx="${idx}">
         <h3>${secSeverityBadge(f.severity)}${categoryLabel}</h3>
         <div>${escapeHtml(f.issue || '')}</div>
         <div class="excerpt">&ldquo;${escapeHtml(f.excerpt || '')}&rdquo;</div>
+        ${hint}
       </div>`;
   });
 
   return html;
+}
+
+const CHECKLIST_STATUS_BADGE = {
+  pass: '<span class="badge good">Pass</span>',
+  fail: '<span class="badge critical">Fail</span>',
+  manual_review: '<span class="badge manual">Manual review</span>',
+  not_applicable: '<span class="badge na">N/A</span>',
+};
+
+// Which security findings a failed checklist item's evidence is actually about - derived
+// straight from how checklist.py builds that evidence string (evaluate_content_checks),
+// not a new correlation: AST01's evidence is drawn from severity in (critical, high); the
+// content-layer AST04 fail is specifically the steganographic_injection category. Other
+// checklist items' evidence isn't finding-shaped (tool-name lists, bundle-level text), so
+// they get no link rather than a guessed one.
+function relatedFindingIdxs(checklistItem, securityFindings) {
+  if (!checklistItem || checklistItem.status !== 'fail') return [];
+  if (checklistItem.id === 'AST01') {
+    return securityFindings
+      .map((f, idx) => idx)
+      .filter(idx => securityFindings[idx].severity === 'critical' || securityFindings[idx].severity === 'high');
+  }
+  if (checklistItem.id === 'AST04') {
+    return securityFindings
+      .map((f, idx) => idx)
+      .filter(idx => securityFindings[idx].category === 'steganographic_injection');
+  }
+  return [];
+}
+
+function renderChecklistSection(checklist, securityFindings) {
+  if (!checklist || checklist.length === 0) return '';
+  securityFindings = securityFindings || [];
+  let html = `
+    <div class="section-title">OWASP Agentic Skills Top 10 checklist</div>
+    <div class="empty-state" style="margin-bottom:0.5rem;">OWASP Incubator project, draft/unratified &mdash; not a certified standard.</div>`;
+  checklist.forEach(c => {
+    const badge = CHECKLIST_STATUS_BADGE[c.status] || `<span class="badge na">${escapeHtml(c.status || '')}</span>`;
+    const related = relatedFindingIdxs(c, securityFindings);
+    const relatedLink = related.length
+      ? `<button type="button" class="related-findings-link" data-related="${related.join(',')}">View ${related.length} related finding${related.length === 1 ? '' : 's'}</button>`
+      : '';
+    html += `
+      <div class="card">
+        <h3>${badge}${escapeHtml(c.id || '')} &mdash; ${escapeHtml(c.title || '')}</h3>
+        ${c.evidence ? `<div>${escapeHtml(c.evidence)}</div>` : ''}
+        ${relatedLink}
+      </div>`;
+  });
+  return html;
+}
+
+const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
+const SEVERITY_BAR_COLOR = { critical: 'var(--critical)', high: 'var(--error)', medium: 'var(--warning)', low: 'var(--info)' };
+
+function renderStatsBar(result) {
+  const findings = result.security_findings || [];
+  const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
+  findings.forEach(f => { if (f.severity in bySeverity) bySeverity[f.severity]++; });
+
+  const checklist = result.checklist || [];
+  const byStatus = { pass: 0, fail: 0, manual_review: 0, not_applicable: 0 };
+  checklist.forEach(c => { if (c.status in byStatus) byStatus[c.status]++; });
+
+  const ambiguityCount = (result.ambiguities || []).length;
+
+  const tiles = [
+    { label: 'Security findings', value: findings.length, tone: findings.length ? 'warning' : 'good' },
+    { label: 'Checklist fails', value: byStatus.fail, tone: byStatus.fail ? 'critical' : 'good' },
+    { label: 'Checklist passes', value: byStatus.pass, tone: 'good' },
+    { label: 'Ambiguities', value: ambiguityCount, tone: ambiguityCount ? 'warning' : 'good' },
+  ];
+
+  const tilesHtml = tiles.map(t => `
+    <div class="stat-tile tone-${t.tone}">
+      <div class="stat-value">${t.value}</div>
+      <div class="stat-label">${escapeHtml(t.label)}</div>
+    </div>`).join('');
+
+  const barSegments = findings.length
+    ? SEVERITY_ORDER.filter(s => bySeverity[s] > 0)
+        .map(s => `<div style="flex:${bySeverity[s]}; background:${SEVERITY_BAR_COLOR[s]};" title="${bySeverity[s]} ${s}"></div>`)
+        .join('')
+    : '<div style="flex:1; background: var(--good);" title="No findings"></div>';
+
+  return `<div class="stats-bar">${tilesHtml}</div><div class="severity-bar">${barSegments}</div>`;
 }
 
 let flowDiagramCounter = 0;
@@ -423,11 +924,17 @@ function renderFlowDiagram(flowDiagram, source) {
     <textarea id="${diagramId}-src" style="position:absolute; left:-9999px;">${escapeHtml(flowDiagram)}</textarea>`;
 }
 
-function render(result) {
+function render(result, cacheInfo) {
   const parts = [];
   const securityFindings = result.security_findings || [];
+  const highlight = result.source_content
+    ? renderHighlightedSource(result.source_content, result.ambiguities || [], securityFindings)
+    : { html: '', foundSecurity: new Set(), foundAmbiguity: new Set() };
 
-  parts.push(renderSecuritySection(securityFindings));
+  parts.push(renderCacheBadge(cacheInfo, 'forceReanalyzeBtn'));
+  parts.push(renderStatsBar(result));
+  parts.push(renderSecuritySection(securityFindings, highlight.foundSecurity));
+  parts.push(renderChecklistSection(result.checklist || [], securityFindings));
 
   if (result.frontmatter && Object.keys(result.frontmatter).length) {
     const rows = Object.entries(result.frontmatter)
@@ -442,8 +949,21 @@ function render(result) {
     parts.push('<div class="card severity-info"><span class="badge good">Clean</span>No structural issues found.</div>');
   } else {
     warnings.forEach(w => {
-      parts.push(`<div class="card severity-${w.severity}">${severityBadge(w.severity)}${escapeHtml(w.message)}</div>`);
+      const snippet = w.suggested_yaml
+        ? `<div class="label" style="margin-top:0.5rem;">Suggested fix</div><div class="fix-yaml">${escapeHtml(w.suggested_yaml)}</div>`
+        : '';
+      parts.push(`<div class="card severity-${w.severity}">${severityBadge(w.severity)}${escapeHtml(w.message)}${snippet}</div>`);
     });
+  }
+
+  const fixableFields = warnings.filter(w => w.suggested_yaml).length;
+  if (fixableFields > 0) {
+    parts.push(`
+      <div class="card" style="margin-top:0.5rem;">
+        <div>${fixableFields} frontmatter field${fixableFields === 1 ? '' : 's'} above can be auto-merged into a corrected copy of this file.</div>
+        <button id="downloadFixBtn" type="button" style="margin-top:0.5rem;">Download corrected SKILL.md</button>
+        <span id="downloadFixStatus" style="margin-left:0.6rem; color: var(--text-dim); font-size:0.85rem;"></span>
+      </div>`);
   }
 
   if (result.references && result.references.length) {
@@ -476,24 +996,79 @@ function render(result) {
       parts.push('<div class="card"><span class="badge good">Clear</span>No ambiguous or conflicting wording flagged.</div>');
     } else {
       ambiguities.forEach((a, idx) => {
+        const located = highlight.foundAmbiguity.has(idx);
+        const hint = a.excerpt
+          ? (located
+              ? '<div class="locate-hint">Click to jump to this in the source below</div>'
+              : '<div class="locate-hint unavailable">Excerpt not found in the source view below</div>')
+          : '';
         parts.push(`
-          <div class="card ambiguity severity-warning" data-idx="${idx}">
+          <div class="card ambiguity severity-warning${located ? ' locatable' : ''}" data-idx="${idx}">
             <h3>Ambiguity #${idx + 1}</h3>
             <div class="excerpt">&ldquo;${escapeHtml(a.excerpt)}&rdquo;</div>
             <div><strong>Issue:</strong> ${escapeHtml(a.issue)}</div>
             <div class="label" style="margin-top:0.5rem;">Suggested fix</div>
             <div class="fix">${escapeHtml(a.suggested_fix)}</div>
+            ${hint}
           </div>`);
       });
     }
   }
 
+  const sourcePanelEl = document.getElementById('sourcePanel');
+  const sourceViewEl = document.getElementById('sourceView');
   if (result.source_content) {
-    const highlighted = renderHighlightedSource(result.source_content, result.ambiguities || [], securityFindings);
-    parts.push(`<div class="section-title">Original content (flagged excerpts highlighted)</div><pre class="source">${highlighted}</pre>`);
+    sourceViewEl.innerHTML = highlight.html;
+    sourcePanelEl.style.display = 'block';
+  } else {
+    sourceViewEl.innerHTML = '';
+    sourcePanelEl.style.display = 'none';
   }
 
   resultsEl.innerHTML = parts.join('\n');
+
+  const forceReanalyzeBtn = document.getElementById('forceReanalyzeBtn');
+  if (forceReanalyzeBtn) {
+    forceReanalyzeBtn.addEventListener('click', () => analyze(true));
+  }
+
+  const downloadFixBtn = document.getElementById('downloadFixBtn');
+  if (downloadFixBtn) {
+    downloadFixBtn.addEventListener('click', async () => {
+      const statusEl = document.getElementById('downloadFixStatus');
+      downloadFixBtn.disabled = true;
+      if (statusEl) statusEl.textContent = 'Building corrected file…';
+      try {
+        const resp = await fetch('/api/frontmatter-fix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: result.source_content }),
+        });
+        const fix = await resp.json();
+        if (!resp.ok) throw new Error(fix.error || 'Request failed.');
+
+        const blob = new Blob([fix.content], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'SKILL.corrected.md';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        if (statusEl) {
+          statusEl.textContent = fix.unmerged_fields && fix.unmerged_fields.length
+            ? `Downloaded. ${fix.unmerged_fields.length} field(s) couldn't be auto-merged - added as commented suggestions instead.`
+            : 'Downloaded.';
+        }
+      } catch (err) {
+        if (statusEl) statusEl.textContent = `Failed: ${String(err && err.message || err)}`;
+      } finally {
+        downloadFixBtn.disabled = false;
+      }
+    });
+  }
 
   const eli5Btn = document.getElementById('eli5ToggleBtn');
   if (eli5Btn) {
@@ -506,25 +1081,55 @@ function render(result) {
     });
   }
 
+  function scrollToMark(mark) {
+    mark.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    mark.classList.add('active');
+    setTimeout(() => mark.classList.remove('active'), 1500);
+  }
+
   resultsEl.querySelectorAll('.ambiguity').forEach(card => {
     card.addEventListener('mouseenter', () => {
-      const mark = resultsEl.querySelector(`#mark-${card.dataset.idx}`);
+      const mark = document.getElementById(`mark-${card.dataset.idx}`);
       if (mark) mark.classList.add('active');
     });
     card.addEventListener('mouseleave', () => {
-      const mark = resultsEl.querySelector(`#mark-${card.dataset.idx}`);
+      const mark = document.getElementById(`mark-${card.dataset.idx}`);
       if (mark) mark.classList.remove('active');
+    });
+    card.addEventListener('click', () => {
+      const mark = document.getElementById(`mark-${card.dataset.idx}`);
+      if (mark) scrollToMark(mark);
     });
   });
 
   resultsEl.querySelectorAll('.security-card').forEach(card => {
     card.addEventListener('mouseenter', () => {
-      const mark = resultsEl.querySelector(`#secmark-${card.dataset.idx}`);
+      const mark = document.getElementById(`secmark-${card.dataset.idx}`);
       if (mark) mark.classList.add('active');
     });
     card.addEventListener('mouseleave', () => {
-      const mark = resultsEl.querySelector(`#secmark-${card.dataset.idx}`);
+      const mark = document.getElementById(`secmark-${card.dataset.idx}`);
       if (mark) mark.classList.remove('active');
+    });
+    card.addEventListener('click', () => {
+      const mark = document.getElementById(`secmark-${card.dataset.idx}`);
+      if (mark) scrollToMark(mark);
+    });
+  });
+
+  resultsEl.querySelectorAll('.related-findings-link').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idxs = btn.dataset.related.split(',').filter(Boolean);
+      let first = null;
+      idxs.forEach(idx => {
+        const card = resultsEl.querySelector(`.security-card[data-idx="${idx}"]`);
+        if (!card) return;
+        if (!first) first = card;
+        card.classList.add('pulse');
+        setTimeout(() => card.classList.remove('pulse'), 1000);
+      });
+      if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   });
 
@@ -555,36 +1160,233 @@ function render(result) {
   });
 }
 
-async function analyze() {
+async function analyze(forceRefresh = false) {
   const content = contentEl.value;
   if (!content.trim()) {
+    clearSourcePanel();
     resultsEl.innerHTML = '<p class="empty-state">Paste or upload a SKILL.md first.</p>';
     return;
   }
+
+  const structuralOnly = structuralOnlyEl.checked;
+  const provider = providerSelectEl.value;
+  const cacheKeyParts = { kind: 'single', content, structuralOnly, provider };
+
+  if (!forceRefresh) {
+    const cached = await getCachedAnalysis(cacheKeyParts);
+    if (cached) {
+      render(cached.result, { fromCache: true, cachedAt: cached.savedAt });
+      setLeftCollapsed(true, false);
+      return;
+    }
+  }
+
+  const controller = new AbortController();
+  currentAnalyzeController = controller;
   analyzeBtn.disabled = true;
   const originalLabel = analyzeBtn.textContent;
   analyzeBtn.innerHTML = '<span class="spinner"></span>Analyzing…';
+  stopAnalyzeBtn.style.display = '';
+  stopAnalyzeBtn.disabled = false;
   try {
     const resp = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, structural_only: structuralOnlyEl.checked }),
+      body: JSON.stringify({ content, structural_only: structuralOnly, provider }),
+      signal: controller.signal,
     });
     const data = await resp.json();
     if (!resp.ok) {
+      clearSourcePanel();
       resultsEl.innerHTML = `<div class="card severity-error">${escapeHtml(data.error || 'Analysis failed.')}</div>`;
       return;
     }
     render(data);
+    setLeftCollapsed(true, false);
+    // Don't cache a semantic request that errored (bad/missing key, rate limit, network
+    // blip) - that would pin the failure for up to ANALYSIS_CACHE_TTL_MS. A structural-only
+    // request's semantic_error is just the expected "not run" placeholder, always safe to
+    // cache.
+    if (!(!structuralOnly && data.semantic_error)) {
+      setCachedAnalysis(cacheKeyParts, data);
+    }
   } catch (err) {
-    resultsEl.innerHTML = `<div class="card severity-error">Request failed: ${escapeHtml(String(err))}</div>`;
+    clearSourcePanel();
+    if (err.name === 'AbortError') {
+      resultsEl.innerHTML = '<p class="empty-state">Analysis cancelled.</p>';
+    } else {
+      resultsEl.innerHTML = `<div class="card severity-error">Request failed: ${escapeHtml(String(err))}</div>`;
+    }
   } finally {
     analyzeBtn.disabled = false;
     analyzeBtn.textContent = originalLabel;
+    stopAnalyzeBtn.style.display = 'none';
+    currentAnalyzeController = null;
   }
 }
 
-analyzeBtn.addEventListener('click', analyze);
+analyzeBtn.addEventListener('click', () => analyze());
+stopAnalyzeBtn.addEventListener('click', () => {
+  if (currentAnalyzeController) currentAnalyzeController.abort();
+});
+
+let currentFolderSkills = [];
+let currentFolderAnalyzeController = null;
+
+const CHECKLIST_STATUS_KEYS = ['fail', 'manual_review', 'pass', 'not_applicable'];
+
+function renderFolderRollup(skills, cacheInfo) {
+  currentFolderSkills = skills;
+  clearSourcePanel();
+  setLeftCollapsed(false, false);
+
+  const totalFindings = skills.reduce((sum, s) => sum + (s.security_findings || []).length, 0);
+  const skillsWithFail = skills.filter(s => (s.checklist || []).some(c => c.status === 'fail')).length;
+  const totalFiles = skills.reduce((sum, s) => sum + ((s.bundle && s.bundle.files) ? s.bundle.files.length : 0), 0);
+  const rollupTiles = [
+    { label: 'Skills scanned', value: skills.length, tone: 'good' },
+    { label: 'Files scanned', value: totalFiles, tone: 'good' },
+    { label: 'Total findings', value: totalFindings, tone: totalFindings ? 'warning' : 'good' },
+    { label: 'Skills with a checklist fail', value: skillsWithFail, tone: skillsWithFail ? 'critical' : 'good' },
+  ];
+  const statsHtml = `<div class="stats-bar">${rollupTiles.map(t => `
+    <div class="stat-tile tone-${t.tone}">
+      <div class="stat-value">${t.value}</div>
+      <div class="stat-label">${escapeHtml(t.label)}</div>
+    </div>`).join('')}</div>`;
+
+  const parts = [renderCacheBadge(cacheInfo, 'forceReanalyzeFolderBtn'), statsHtml, `<div class="section-title">Skills discovered (${skills.length})</div>`];
+
+  skills.forEach((s, idx) => {
+    const counts = { fail: 0, manual_review: 0, pass: 0, not_applicable: 0 };
+    (s.checklist || []).forEach(c => { if (c.status in counts) counts[c.status]++; });
+    const severeCount = (s.security_findings || []).filter(f => f.severity === 'critical' || f.severity === 'high').length;
+    const fileCount = (s.bundle && s.bundle.files) ? s.bundle.files.length : 0;
+
+    const badges = CHECKLIST_STATUS_KEYS
+      .filter(k => counts[k] > 0)
+      .map(k => {
+        const cls = { fail: 'critical', manual_review: 'manual', pass: 'good', not_applicable: 'na' }[k];
+        const label = { fail: 'fail', manual_review: 'manual', pass: 'pass', not_applicable: 'n/a' }[k];
+        return `<span class="badge ${cls}">${counts[k]} ${label}</span>`;
+      })
+      .join(' ');
+
+    parts.push(`
+      <div class="card folder-skill-card" data-skill-idx="${idx}">
+        <h3>${escapeHtml(s.skill_relpath)}</h3>
+        <div class="label">Scope: ${escapeHtml(s.scope)} &middot; ${fileCount} file(s) in bundle</div>
+        <div style="margin-top:0.4rem;">${badges}${severeCount ? ` <span class="badge high">${severeCount} severe finding(s)</span>` : ''}</div>
+        <button type="button" class="secondary folder-view-btn" data-skill-idx="${idx}" style="margin-top:0.6rem;">View full analysis</button>
+      </div>`);
+  });
+
+  resultsEl.innerHTML = parts.join('\n');
+
+  const forceReanalyzeFolderBtn = document.getElementById('forceReanalyzeFolderBtn');
+  if (forceReanalyzeFolderBtn) {
+    forceReanalyzeFolderBtn.addEventListener('click', () => analyzeFolder(true));
+  }
+
+  resultsEl.querySelectorAll('.folder-view-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      renderFolderSkillDetail(parseInt(btn.dataset.skillIdx, 10));
+    });
+  });
+  resultsEl.querySelectorAll('.folder-skill-card').forEach(card => {
+    card.addEventListener('click', () => renderFolderSkillDetail(parseInt(card.dataset.skillIdx, 10)));
+  });
+}
+
+function renderFolderSkillDetail(idx) {
+  const skill = currentFolderSkills[idx];
+  if (!skill) return;
+  render(skill);
+  setLeftCollapsed(true, false);
+  const backBtn = document.createElement('button');
+  backBtn.type = 'button';
+  backBtn.className = 'secondary';
+  backBtn.textContent = '← Back to folder results';
+  backBtn.style.marginBottom = '0.75rem';
+  backBtn.addEventListener('click', () => renderFolderRollup(currentFolderSkills));
+  resultsEl.insertBefore(backBtn, resultsEl.firstChild);
+}
+
+async function analyzeFolder(forceRefresh = false) {
+  const files = folderInput.files;
+  if (!files || files.length === 0) {
+    clearSourcePanel();
+    resultsEl.innerHTML = '<p class="empty-state">Select a folder first.</p>';
+    return;
+  }
+
+  const controller = new AbortController();
+  currentFolderAnalyzeController = controller;
+  analyzeFolderBtn.disabled = true;
+  const originalLabel = analyzeFolderBtn.textContent;
+  analyzeFolderBtn.innerHTML = '<span class="spinner"></span>Checking cache…';
+  stopAnalyzeFolderBtn.style.display = '';
+  stopAnalyzeFolderBtn.disabled = false;
+  try {
+    const provider = folderProviderSelectEl.value;
+    const semanticSkills = getSelectedSemanticSkills();
+    const signature = await computeFolderSignature(files);
+    const cacheKeyParts = { kind: 'folder', signature, provider, semanticSkills };
+
+    if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    if (!forceRefresh) {
+      const cached = await getCachedAnalysis(cacheKeyParts);
+      if (cached) {
+        renderFolderRollup(cached.result.skills || [], { fromCache: true, cachedAt: cached.savedAt });
+        return;
+      }
+    }
+
+    analyzeFolderBtn.innerHTML = '<span class="spinner"></span>Analyzing…';
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append('files', file, file.webkitRelativePath || file.name);
+    }
+    formData.append('provider', provider);
+    formData.append('semantic_skills', JSON.stringify(semanticSkills));
+
+    const resp = await fetch('/api/analyze-folder', { method: 'POST', body: formData, signal: controller.signal });
+    const data = await resp.json();
+    if (!resp.ok) {
+      clearSourcePanel();
+      resultsEl.innerHTML = `<div class="card severity-error">${escapeHtml(data.error || 'Analysis failed.')}</div>`;
+      return;
+    }
+    renderFolderRollup(data.skills || []);
+    // Same reasoning as analyze(): don't pin a semantic failure for any skill that was
+    // actually asked for semantic analysis - only those, since a skill that wasn't selected
+    // always carries the harmless "not run" placeholder in its own semantic_error field.
+    const semanticSkillSet = new Set(semanticSkills);
+    const anySemanticFailure = (data.skills || []).some(s => semanticSkillSet.has(s.skill_relpath) && s.semantic_error);
+    if (!anySemanticFailure) {
+      setCachedAnalysis(cacheKeyParts, data);
+    }
+  } catch (err) {
+    clearSourcePanel();
+    if (err.name === 'AbortError') {
+      resultsEl.innerHTML = '<p class="empty-state">Analysis cancelled.</p>';
+    } else {
+      resultsEl.innerHTML = `<div class="card severity-error">Request failed: ${escapeHtml(String(err))}</div>`;
+    }
+  } finally {
+    analyzeFolderBtn.disabled = false;
+    analyzeFolderBtn.textContent = originalLabel;
+    stopAnalyzeFolderBtn.style.display = 'none';
+    currentFolderAnalyzeController = null;
+  }
+}
+
+analyzeFolderBtn.addEventListener('click', () => analyzeFolder());
+stopAnalyzeFolderBtn.addEventListener('click', () => {
+  if (currentFolderAnalyzeController) currentFolderAnalyzeController.abort();
+});
 </script>
 </body>
 </html>

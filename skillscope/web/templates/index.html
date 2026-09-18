@@ -93,7 +93,7 @@
   #inputPanel.collapsed .panel-body { display: none; }
   textarea {
     width: 100%;
-    min-height: 380px;
+    min-height: 220px;
     background: #0b0d13;
     color: var(--text);
     border: 1px solid var(--panel-border);
@@ -291,8 +291,8 @@
         <div class="controls">
           <button id="analyzeBtn">Analyze</button>
           <button id="stopAnalyzeBtn" class="secondary" type="button" style="display:none;">Stop</button>
-          <button id="loadExampleBtn" class="secondary" type="button">Load ambiguous example</button>
           <label class="checkbox"><input type="checkbox" id="structuralOnly"> Structural only (skip API call)</label>
+          <button id="loadExampleBtn" class="secondary" type="button">Load ambiguous example</button>
           <label class="checkbox">Provider:
             <select id="providerSelect">
               <option value="anthropic" {{ '' if provider_configured.anthropic else 'disabled' }}>Anthropic{{ '' if provider_configured.anthropic else ' (not configured)' }}</option>
@@ -312,6 +312,7 @@
         <div class="controls">
           <button id="analyzeFolderBtn" type="button">Analyze folder</button>
           <button id="stopAnalyzeFolderBtn" class="secondary" type="button" style="display:none;">Stop</button>
+          <label class="checkbox"><input type="checkbox" id="folderStructuralOnly" checked> Structural only (skip API call)</label>
           <label class="checkbox">Provider:
             <select id="folderProviderSelect">
               <option value="anthropic" {{ '' if provider_configured.anthropic else 'disabled' }}>Anthropic{{ '' if provider_configured.anthropic else ' (not configured)' }}</option>
@@ -319,7 +320,6 @@
               <option value="azure" {{ '' if provider_configured.azure else 'disabled' }}>Azure AI Foundry{{ '' if provider_configured.azure else ' (not configured)' }}</option>
             </select>
           </label>
-          <label class="checkbox"><input type="checkbox" id="folderSemantic"> Also run semantic analysis on each skill</label>
         </div>
         <p class="folder-consent-note" id="folderConsentNote"></p>
       </div>
@@ -381,7 +381,7 @@ const folderInput = document.getElementById('folderInput');
 const analyzeFolderBtn = document.getElementById('analyzeFolderBtn');
 const stopAnalyzeFolderBtn = document.getElementById('stopAnalyzeFolderBtn');
 const folderProviderSelectEl = document.getElementById('folderProviderSelect');
-const folderSemanticEl = document.getElementById('folderSemantic');
+const folderStructuralOnlyEl = document.getElementById('folderStructuralOnly');
 const folderConsentNote = document.getElementById('folderConsentNote');
 
 function setMode(mode) {
@@ -391,22 +391,30 @@ function setMode(mode) {
   singleModePanel.style.display = isFolder ? 'none' : '';
   folderModePanel.style.display = isFolder ? '' : 'none';
 }
-modeSingleBtn.addEventListener('click', () => setMode('single'));
-modeFolderBtn.addEventListener('click', () => setMode('folder'));
+function switchMode(mode) {
+  setMode(mode);
+  // A manual mode switch starts fresh - otherwise a stale single-file source view (or a
+  // stale folder rollup) stays on screen next to controls for the mode you just switched
+  // to, which reads as showing results for content that isn't even selected anymore.
+  clearSourcePanel();
+  resultsEl.innerHTML = '<p class="empty-state">Results will appear here after you click Analyze.</p>';
+}
+modeSingleBtn.addEventListener('click', () => switchMode('single'));
+modeFolderBtn.addEventListener('click', () => switchMode('folder'));
 
 function updateFolderConsentNote() {
   const count = (folderInput.files || []).length;
-  const semantic = folderSemanticEl.checked;
+  const semantic = !folderStructuralOnlyEl.checked;
   if (!count) {
     folderConsentNote.textContent = '';
     return;
   }
   folderConsentNote.textContent = semantic
     ? `${count} file(s) selected. Each discovered skill's SKILL.md content will be sent to ${folderProviderSelectEl.value} for semantic analysis - bundled scripts/resources are never sent, only pattern/Unicode-scanned locally.`
-    : `${count} file(s) selected. Structural/security scanning only - nothing leaves this machine unless you check "Also run semantic analysis".`;
+    : `${count} file(s) selected. Structural/security scanning only - nothing leaves this machine unless you uncheck "Structural only".`;
 }
 folderInput.addEventListener('change', updateFolderConsentNote);
-folderSemanticEl.addEventListener('change', updateFolderConsentNote);
+folderStructuralOnlyEl.addEventListener('change', updateFolderConsentNote);
 folderProviderSelectEl.addEventListener('change', updateFolderConsentNote);
 
 const AMBIGUOUS_EXAMPLE = `---
@@ -1251,7 +1259,7 @@ async function analyzeFolder(forceRefresh = false) {
   stopAnalyzeFolderBtn.disabled = false;
   try {
     const provider = folderProviderSelectEl.value;
-    const semantic = folderSemanticEl.checked;
+    const semantic = !folderStructuralOnlyEl.checked;
     const signature = await computeFolderSignature(files);
     const cacheKeyParts = { kind: 'folder', signature, provider, semantic };
 

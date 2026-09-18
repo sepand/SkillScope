@@ -106,7 +106,7 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.85rem;
   }
-  textarea { min-height: 340px; resize: vertical; }
+  textarea { min-height: 220px; resize: vertical; }
   .controls { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-top: 0.75rem; }
   button {
     background: var(--accent);
@@ -285,24 +285,6 @@
       </div>
     </div>
     <div class="panel-body" id="inputPanelBody">
-      <div class="info-banner">
-        This page runs the real SkillScope parsing/security-scan logic locally in your browser via
-        <a href="https://pyodide.org/" style="color:var(--info);">Pyodide</a> (Python compiled to WebAssembly) &mdash;
-        structural analysis needs no API key and nothing you paste here is sent anywhere.
-        AI-powered analysis (summary, ambiguities, flow diagram) calls the Anthropic API
-        <strong>directly from your browser</strong> using a key you provide below; it is stored only in
-        this browser (if you check "remember") and is sent only to <code>api.anthropic.com</code>, never
-        to any server of ours &mdash; this page is static and has no backend. For a version that keeps
-        your key server-side instead, run the Flask app from the
-        <a href="https://github.com/sepand/SkillScope" style="color:var(--info);">repo</a> locally.
-      </div>
-      <div class="key-field">
-        <div class="label">Anthropic API key (optional &mdash; only needed for AI-powered analysis)</div>
-        <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off">
-        <label class="checkbox" style="margin-top:0.4rem;">
-          <input type="checkbox" id="rememberKey"> Remember key in this browser (localStorage)
-        </label>
-      </div>
       <div class="mode-toggle">
         <button type="button" id="modeSingleBtn" class="mode-btn active">Single file</button>
         <button type="button" id="modeFolderBtn" class="mode-btn">Folder</button>
@@ -314,9 +296,16 @@
         <div class="controls">
           <button id="analyzeBtn" disabled>Loading Pyodide&hellip;</button>
           <button id="stopAnalyzeBtn" class="secondary" type="button" style="display:none;">Stop</button>
-          <button id="loadExampleBtn" class="secondary" type="button">Load ambiguous example</button>
           <label class="checkbox"><input type="checkbox" id="structuralOnly"> Structural only (skip API call)</label>
+          <button id="loadExampleBtn" class="secondary" type="button">Load ambiguous example</button>
           <input type="file" id="fileInput" accept=".md,.markdown,text/markdown,text/plain">
+        </div>
+        <div class="key-field">
+          <div class="label">Anthropic API key (optional &mdash; only needed for AI-powered analysis)</div>
+          <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off">
+          <label class="checkbox" style="margin-top:0.4rem;">
+            <input type="checkbox" id="rememberKey"> Remember key in this browser (localStorage)
+          </label>
         </div>
       </div>
 
@@ -330,6 +319,18 @@
           <button id="stopAnalyzeFolderBtn" class="secondary" type="button" style="display:none;">Stop</button>
         </div>
         <p class="folder-consent-note" id="folderConsentNote"></p>
+      </div>
+
+      <div class="info-banner">
+        This page runs the real SkillScope parsing/security-scan logic locally in your browser via
+        <a href="https://pyodide.org/" style="color:var(--info);">Pyodide</a> (Python compiled to WebAssembly) &mdash;
+        structural analysis needs no API key and nothing you paste here is sent anywhere.
+        AI-powered analysis (summary, ambiguities, flow diagram) calls the Anthropic API
+        <strong>directly from your browser</strong> using the key above; it is stored only in
+        this browser (if you check "remember") and is sent only to <code>api.anthropic.com</code>, never
+        to any server of ours &mdash; this page is static and has no backend. For a version that keeps
+        your key server-side instead, run the Flask app from the
+        <a href="https://github.com/sepand/SkillScope" style="color:var(--info);">repo</a> locally.
       </div>
 
       <div id="pyodideStatus">Loading Python runtime&hellip;</div>
@@ -402,8 +403,16 @@ function setMode(mode) {
   singleModePanel.style.display = isFolder ? 'none' : '';
   folderModePanel.style.display = isFolder ? '' : 'none';
 }
-modeSingleBtn.addEventListener('click', () => setMode('single'));
-modeFolderBtn.addEventListener('click', () => setMode('folder'));
+function switchMode(mode) {
+  setMode(mode);
+  // A manual mode switch starts fresh - otherwise a stale single-file source view (or a
+  // stale folder rollup) stays on screen next to controls for the mode you just switched
+  // to, which reads as showing results for content that isn't even selected anymore.
+  clearSourcePanel();
+  resultsEl.innerHTML = '<p class="empty-state">Results will appear here after you click Analyze.</p>';
+}
+modeSingleBtn.addEventListener('click', () => switchMode('single'));
+modeFolderBtn.addEventListener('click', () => switchMode('folder'));
 
 folderInput.addEventListener('change', () => {
   const count = (folderInput.files || []).length;

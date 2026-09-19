@@ -303,8 +303,14 @@ _GO_REPLACE_SINGLE_RE = re.compile(r"^[ \t]*replace\s+(?!\()\S+.*=>.*\S", re.MUL
 # go.mod's block form: `replace (\n  old => new\n  ...\n)` - each inner line omits the
 # `replace` keyword, so it needs its own extraction pass over the block's body. Anchored
 # to line start (like the single-line pattern above) so a commented-out `// replace (`
-# isn't treated as a real block opener.
-_GO_REPLACE_BLOCK_RE = re.compile(r"^[ \t]*replace\s*\(([^)]*)\)", re.DOTALL | re.MULTILINE)
+# isn't treated as a real block opener. The closing paren is matched as its own line
+# (`)` alone, optionally indented - the real go.mod convention) rather than the first `)`
+# character anywhere in the block body, since a trailing comment inside the block can
+# legitimately contain a `)` (e.g. `// see issue (#123)`) that would otherwise truncate
+# the capture before later replace lines.
+_GO_REPLACE_BLOCK_RE = re.compile(
+    r"^[ \t]*replace\s*\([ \t]*\n(.*?)^[ \t]*\)[ \t]*$", re.DOTALL | re.MULTILINE,
+)
 _GO_REPLACE_BLOCK_LINE_RE = re.compile(r"^[ \t]*\S+.*=>.*\S", re.MULTILINE)
 
 

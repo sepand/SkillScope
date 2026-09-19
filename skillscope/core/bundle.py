@@ -33,7 +33,11 @@ _TEXT_EXTENSIONS = {
 _MAX_FILE_BYTES = 2 * 1024 * 1024
 _DEFAULT_MAX_TOTAL_BYTES = 50 * 1024 * 1024
 
-_SKIPPED_DIR_NAMES = frozenset({".git", "node_modules", "__pycache__"})
+# Matches discovery.py's _EXCLUDED_DIR_NAMES - a skill bundling a virtualenv or build
+# output shouldn't have that vendored tree walked any more than node_modules should.
+_SKIPPED_DIR_NAMES = frozenset({
+    ".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".tox",
+})
 
 # Used by checklist.py's AST04 permission-understating cross-check: frontmatter says no
 # network access, but a bundled file makes one anyway - the concrete example OWASP AST04

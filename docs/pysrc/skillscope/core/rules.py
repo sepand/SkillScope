@@ -283,16 +283,19 @@ _MANIFEST_GO_REPLACE_CITATION = (
     "- reviewers should verify the replacement target matches intent."
 )
 
-# Requires the actual fetch-AND-execute shape (matching security.py's own
+# Requires the actual fetch/decode-AND-execute shape (matching security.py's own
 # remote_code_execution pattern), not just the tool's presence - a bare `curl -o file` or
 # `wget` invocation to download a prebuilt binary (a common, legitimate postinstall
-# pattern, e.g. esbuild/sharp-style native-binary installers) or an `nc -z host port`
-# healthcheck must not fire this. `nc` is narrowed to `-e` (netcat's "execute program
-# after connect" flag - the actual reverse-shell primitive), not any `nc -<flag>`.
+# pattern, e.g. esbuild/sharp-style native-binary installers), an `nc -z host port`
+# healthcheck, or a `base64 -d config.b64 > config.json` decode-to-file must not fire
+# this. `nc` is narrowed to `-e` (netcat's "execute program after connect" flag - the
+# actual reverse-shell primitive), not any `nc -<flag>`; `base64` requires the decoded
+# output to be piped into an interpreter, not just decoded.
 _MANIFEST_NETWORK_EXEC_RE = re.compile(
     r"(curl|wget)\s+[^|;&]*\|\s*(sudo\s+)?(sh|bash|zsh|python[23]?)\b"
     r"|\bnc\s+-[a-z]*e\b"
-    r"|\beval\s*\(|base64\s+(-d|--decode)\b",
+    r"|\beval\s*\("
+    r"|base64\s+(-d|--decode)\b[^|;&]*\|\s*(sudo\s+)?(sh|bash|zsh|python[23]?)\b",
     re.IGNORECASE,
 )
 # pip's own requirements.txt line syntax: `git+https://...` (optionally `-e git+...`).

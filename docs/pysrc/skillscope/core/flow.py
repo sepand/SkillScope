@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import re
 
-_STEP_RE = re.compile(r"^[ \t]*(\d+)[.)][ \t]+(.+)$", re.MULTILINE)
+# \S.* rather than .+ for the step text: [ \t]+ and a following .+ both match spaces/tabs,
+# an ambiguous-split (polynomial-backtracking) shape on a step line padded with many
+# spaces and no real content. Requiring the text to start with a non-whitespace character
+# fixes the split point uniquely.
+_STEP_RE = re.compile(r"^[ \t]*(\d+)[.)][ \t]+(\S.*)$", re.MULTILINE)
 _MD_STRIP_RE = re.compile(r"[`*_]")
 _MAX_STEPS = 15
 _MAX_LABEL_LEN = 70

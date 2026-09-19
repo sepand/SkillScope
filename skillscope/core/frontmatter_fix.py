@@ -21,7 +21,11 @@ import yaml
 
 from .models import FrontmatterFixResult, StructuralWarning
 
-FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?\n)---\s*\n?", re.DOTALL)
+# See parser.py::FRONTMATTER_RE for why [ \t]* (not \s*) precedes each required \n - \s*\n
+# has many ways to split a run of blank lines, a polynomial-backtracking shape on
+# adversarial input - and for why \r? precedes each \n: the web app's upload/paste path
+# has no newline normalization, so a real CRLF-authored file must still match.
+FRONTMATTER_RE = re.compile(r"\A---[ \t]*\r?\n(.*?\n)---[ \t]*\r?\n?", re.DOTALL)
 
 _TEMPLATE_INDENT = "  "
 

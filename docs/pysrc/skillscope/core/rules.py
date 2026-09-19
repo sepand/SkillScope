@@ -301,8 +301,10 @@ _PIPFILE_VCS_RE = re.compile(
 # go.mod's single-line form: `replace old/module => new/module v1.2.3`.
 _GO_REPLACE_SINGLE_RE = re.compile(r"^[ \t]*replace\s+(?!\()\S+.*=>.*\S", re.MULTILINE)
 # go.mod's block form: `replace (\n  old => new\n  ...\n)` - each inner line omits the
-# `replace` keyword, so it needs its own extraction pass over the block's body.
-_GO_REPLACE_BLOCK_RE = re.compile(r"replace\s*\(([^)]*)\)", re.DOTALL)
+# `replace` keyword, so it needs its own extraction pass over the block's body. Anchored
+# to line start (like the single-line pattern above) so a commented-out `// replace (`
+# isn't treated as a real block opener.
+_GO_REPLACE_BLOCK_RE = re.compile(r"^[ \t]*replace\s*\(([^)]*)\)", re.DOTALL | re.MULTILINE)
 _GO_REPLACE_BLOCK_LINE_RE = re.compile(r"^[ \t]*\S+.*=>.*\S", re.MULTILINE)
 
 
@@ -393,7 +395,10 @@ def _scan_go_mod_replace(content: str) -> list[SecurityFinding]:
         for line_m in _GO_REPLACE_BLOCK_LINE_RE.finditer(block_m.group(1)):
             line = line_m.group(0).split("//", 1)[0].strip()
             if line:
-                excerpts.append(line)
+                # Block-form lines omit the `replace` keyword (it's on the block's own
+                # opening line, not repeated per entry) - prefix it back on so excerpts
+                # read consistently regardless of which go.mod form they came from.
+                excerpts.append(f"replace {line}")
 
     findings: list[SecurityFinding] = []
     seen: set[str] = set()

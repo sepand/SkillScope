@@ -322,9 +322,12 @@ _GO_REPLACE_SINGLE_RE = re.compile(r"^[ \t]*replace\s+(?!\()\S+.*=>.*\S", re.MUL
 # (`)` alone, optionally indented - the real go.mod convention) rather than the first `)`
 # character anywhere in the block body, since a trailing comment inside the block can
 # legitimately contain a `)` (e.g. `// see issue (#123)`) that would otherwise truncate
-# the capture before later replace lines.
+# the capture before later replace lines. Tolerates a trailing \r before each \n/end-of-
+# line so a Windows-CRLF go.mod still matches - bundle.py's own Path.read_text() already
+# normalizes CRLF to LF before content reaches here, but this regex shouldn't silently
+# depend on that; it should be correct standalone for any direct caller.
 _GO_REPLACE_BLOCK_RE = re.compile(
-    r"^[ \t]*replace\s*\([ \t]*\n(.*?)^[ \t]*\)[ \t]*$", re.DOTALL | re.MULTILINE,
+    r"^[ \t]*replace\s*\([ \t]*\r?\n(.*?)^[ \t]*\)[ \t]*\r?$", re.DOTALL | re.MULTILINE,
 )
 _GO_REPLACE_BLOCK_LINE_RE = re.compile(r"^[ \t]*\S+.*=>.*\S", re.MULTILINE)
 

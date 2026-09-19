@@ -366,6 +366,22 @@ original pattern scan in `security.py`:
 - A correlation rule that escalates severity when an obfuscated payload and
   prompt-injection phrasing both fire on the same file
 
+In directory/bundle mode, dependency-manifest files get two additional, ecosystem-specific
+checks (also in `rules.py`, dispatched by `scan_manifest_file`):
+
+- A `package.json` `preinstall`/`install`/`postinstall` lifecycle script that runs a
+  network-fetch-and-execute or decode/eval pattern — these hooks run automatically on
+  `npm install`, before any human reviews the code (the mechanism behind the 2018
+  event-stream and 2021 ua-parser-js/coa/rc npm compromises)
+- A `requirements.txt`/`Pipfile`/`go.mod` dependency pinned directly to a VCS URL, arbitrary
+  HTTP(S) location, or fork (via a `replace` directive) instead of a published
+  package-index release — bypasses the index's own review/typosquat protections
+
+This is intentionally narrow — two concrete, documented techniques per ecosystem, not a
+general dependency auditor. It has no package-registry lookup, no CVE/vulnerability
+database, and no typosquat detection; those need external registry/vulnerability data
+SkillScope deliberately doesn't fetch, per the no-live-external-feed design above.
+
 `skillscope/core/unicode_scan.py` separately flags hidden/invisible Unicode characters
 (zero-width, bidirectional-control, Unicode Tag-block, and variation-selector codepoints)
 that render as nothing to a human but are still tokenized and can be obeyed by an LLM —

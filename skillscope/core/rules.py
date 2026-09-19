@@ -271,10 +271,10 @@ _MANIFEST_INSTALL_HOOK_CITATION = (
     "event-stream compromise and the 2021 ua-parser-js/coa/rc compromises."
 )
 _MANIFEST_VCS_BYPASS_CITATION = (
-    "pip and npm both support installing a dependency directly from a VCS URL or "
-    "arbitrary HTTP(S) location instead of a published package-index release - a "
-    "supported feature, but one that bypasses the index's own review/typosquat "
-    "protections entirely, so the actual target warrants a manual look."
+    "pip supports installing a dependency directly from a VCS URL (git+/hg+/svn+/bzr+) "
+    "instead of a published package-index release - a supported feature, but one that "
+    "bypasses the index's own review/typosquat protections entirely, so the actual "
+    "target warrants a manual look."
 )
 _MANIFEST_GO_REPLACE_CITATION = (
     "Go's own module documentation: a 'replace' directive silently substitutes a "
@@ -297,7 +297,12 @@ _PIPFILE_VCS_RE = re.compile(
     r"\{[^{}]*\b(?:git|hg|svn|bzr)\s*=\s*[\"'][^\"']+[\"'][^{}]*\}",
     re.IGNORECASE,
 )
-_GO_REPLACE_RE = re.compile(r"^\s*replace\s+\S+.*=>.*\S", re.MULTILINE)
+# go.mod's single-line form: `replace old/module => new/module v1.2.3`.
+_GO_REPLACE_SINGLE_RE = re.compile(r"^[ \t]*replace\s+(?!\()\S+.*=>.*\S", re.MULTILINE)
+# go.mod's block form: `replace (\n  old => new\n  ...\n)` - each inner line omits the
+# `replace` keyword, so it needs its own extraction pass over the block's body.
+_GO_REPLACE_BLOCK_RE = re.compile(r"replace\s*\(([^)]*)\)", re.DOTALL)
+_GO_REPLACE_BLOCK_LINE_RE = re.compile(r"^[ \t]*\S+.*=>.*\S", re.MULTILINE)
 
 
 def _scan_package_json_scripts(content: str) -> list[SecurityFinding]:
@@ -364,11 +369,21 @@ def _scan_pip_vcs_installs(content: str, pattern: re.Pattern) -> list[SecurityFi
 def _scan_go_mod_replace(content: str) -> list[SecurityFinding]:
     """Flags a go.mod 'replace' directive, which silently redirects a dependency to a
     different source - a legitimate feature (local development, patched forks) that is
-    also a documented way to smuggle code in under a trusted-looking import path."""
+    also a documented way to smuggle code in under a trusted-looking import path. Handles
+    both go.mod forms: the single-line `replace old => new` and the block form
+    `replace (\n old => new\n ... \n)`, whose inner lines omit the `replace` keyword."""
+    excerpts: list[str] = []
+    for m in _GO_REPLACE_SINGLE_RE.finditer(content):
+        excerpts.append(m.group(0).strip())
+    for block_m in _GO_REPLACE_BLOCK_RE.finditer(content):
+        for line_m in _GO_REPLACE_BLOCK_LINE_RE.finditer(block_m.group(1)):
+            line = line_m.group(0).split("//", 1)[0].strip()
+            if line:
+                excerpts.append(line)
+
     findings: list[SecurityFinding] = []
     seen: set[str] = set()
-    for m in _GO_REPLACE_RE.finditer(content):
-        excerpt = m.group(0).strip()
+    for excerpt in excerpts:
         if excerpt in seen:
             continue
         seen.add(excerpt)

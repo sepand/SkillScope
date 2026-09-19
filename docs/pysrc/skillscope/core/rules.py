@@ -288,13 +288,17 @@ _MANIFEST_GO_REPLACE_CITATION = (
 # `wget` invocation to download a prebuilt binary (a common, legitimate postinstall
 # pattern, e.g. esbuild/sharp-style native-binary installers), an `nc -z host port`
 # healthcheck, or a `base64 -d config.b64 > config.json` decode-to-file must not fire
-# this. `nc` is narrowed to `-e` (netcat's "execute program after connect" flag - the
-# actual reverse-shell primitive), not any `nc -<flag>`; `base64` requires the decoded
-# output to be piped into an interpreter, not just decoded.
+# this. `eval(` is narrowed to actually wrapping a decode call (`atob`/`Buffer.from`) -
+# matching the "decode-then-eval" technique this rule's own citation describes, not any
+# eval() call regardless of what it's evaluating. `nc`/`ncat` uses a lookahead for a
+# `-...e` flag anywhere later in the command, not just immediately after the tool name,
+# since real reverse-shell invocations commonly separate flags (`nc -v -e /bin/sh ...`),
+# not just combine them (`nc -e ...`/`nc -ne ...`); `base64` requires the decoded output
+# to be piped into an interpreter, not just decoded.
 _MANIFEST_NETWORK_EXEC_RE = re.compile(
     r"(curl|wget)\s+[^|;&]*\|\s*(sudo\s+)?(sh|bash|zsh|python[23]?)\b"
-    r"|\bnc\s+-[a-z]*e\b"
-    r"|\beval\s*\("
+    r"|\b(nc|ncat)\b(?=[^\n;&]*\s-[a-z]*e\b)"
+    r"|\beval\s*\(\s*(atob\(|Buffer\.from\()"
     r"|base64\s+(-d|--decode)\b[^|;&]*\|\s*(sudo\s+)?(sh|bash|zsh|python[23]?)\b",
     re.IGNORECASE,
 )

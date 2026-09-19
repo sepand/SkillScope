@@ -259,8 +259,9 @@ def check_combined_payload_injection(findings: list[SecurityFinding]) -> list[Se
 
 
 # --- Dependency-manifest checks (package.json / requirements.txt / Pipfile / go.mod) ---
-# Narrowly scoped to two concrete, widely-documented supply-chain techniques that are
-# decidable from a single manifest file's own text, with no package-registry lookup
+# Narrowly scoped to a small number of concrete, widely-documented supply-chain
+# techniques that are decidable from a single manifest file's own text, with no
+# package-registry lookup
 # needed - this is NOT a general dependency auditor (no typosquat detection, no CVE
 # database; those need external registry/vulnerability data SkillScope doesn't have and
 # has deliberately not wired up as a live external fetch - see module docstring).
@@ -339,11 +340,24 @@ def _scan_package_json_scripts(content: str) -> list[SecurityFinding]:
     return findings
 
 
+_FULL_LINE_COMMENT_RE = re.compile(r"^[ \t]*#.*$", re.MULTILINE)
+
+
+def _strip_full_line_comments(content: str) -> str:
+    """Removes lines whose first non-whitespace character is `#` (a requirements.txt or
+    Pipfile full-line comment - e.g. a commented-out example dependency), so it doesn't
+    trip the VCS-bypass check below. Only a full-line comment is stripped, not text after
+    a mid-line `#` - a real VCS URL can legitimately contain `#egg=name` as a fragment, and
+    naively truncating at the first `#` would corrupt that match."""
+    return _FULL_LINE_COMMENT_RE.sub("", content)
+
+
 def _scan_pip_vcs_installs(content: str, pattern: re.Pattern) -> list[SecurityFinding]:
     """Flags a requirements.txt/Pipfile dependency installed directly from a VCS URL,
     bypassing the package index's own review/typosquat protections. `pattern` selects the
     ecosystem-specific spelling (pip's `git+https://` line syntax vs. Pipfile's TOML
     inline-table syntax) - the two files express the same bypass differently."""
+    content = _strip_full_line_comments(content)
     findings: list[SecurityFinding] = []
     seen: set[str] = set()
     for m in pattern.finditer(content):
@@ -406,8 +420,9 @@ def _scan_go_mod_replace(content: str) -> list[SecurityFinding]:
 
 def scan_manifest_file(filename: str, content: str) -> list[SecurityFinding]:
     """Dispatches to the manifest-specific check for known dependency-manifest filenames.
-    Returns [] for anything else - this is intentionally narrow (two concrete, cited
-    techniques per ecosystem), not a general dependency auditor. Called per-file from
+    Returns [] for anything else - this is intentionally narrow (one concrete, cited
+    technique per ecosystem: npm install hooks, pip/Pipfile VCS-bypass installs, go.mod
+    replace redirects), not a general dependency auditor. Called per-file from
     bundle.py's directory walk; single-file mode has no separate manifest to scan."""
     name = filename.replace("\\", "/").rsplit("/", 1)[-1]
     if name == "package.json":

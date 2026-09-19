@@ -55,10 +55,11 @@ total, and don't cram full sentences into a node.
    - If the skill has no discernible step-by-step flow (e.g. it's a single atomic action or \
 pure reference content with nothing sequential to diagram), omit flow_diagram entirely instead \
 of forcing a diagram.
-6. Write an ELI5 ("explain like I'm 5") version of the summary: 2-4 short sentences, no \
-jargon, no tool/framework names, using a simple everyday analogy where it genuinely helps \
-(don't force one if it doesn't fit). It should be understandable to someone who has never \
-written or read code. This is a companion to "summary", not a replacement — write both.
+6. Write a plain-language version of the summary for a non-technical reader: 2-4 short \
+sentences, no jargon, no tool/framework names, using a simple everyday analogy where it \
+genuinely helps (don't force one if it doesn't fit). It should be understandable to someone \
+who has never written or read code. This is a companion to "summary", not a replacement — \
+write both.
 
 Excerpt fields must be an exact, verbatim substring of the file content shown to you (same \
 characters, same casing, same punctuation, including any quote marks it contains) so it can \
@@ -93,7 +94,7 @@ RESPONSE_TOOL = {
             },
             "eli5_summary": {
                 "type": "string",
-                "description": "A dead-simple, jargon-free 2-4 sentence explanation a total beginner could follow.",
+                "description": "A concise, jargon-free 2-4 sentence explanation accessible to a non-technical reader.",
             },
             "trigger_conditions": {
                 "type": "string",

@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-from rich.console import Console
+from rich.console import Console, Group
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -57,12 +58,16 @@ def render_security_findings(console: Console, findings: list) -> None:
 
     for f in findings:
         sev = f.get("severity", "medium")
-        body = Text()
-        body.append(f" {sev.upper()} ", style=SEC_SEVERITY_STYLE.get(sev, "bold yellow"))
-        body.append(f" [{f.get('category', 'other')}] ", style="bold")
-        body.append(f"{f.get('issue', '')}\n\n")
-        body.append("Excerpt: ", style="bold")
-        body.append(f"\"{f.get('excerpt', '')}\"", style="italic")
+        header = Text()
+        header.append(f" {sev.upper()} ", style=SEC_SEVERITY_STYLE.get(sev, "bold yellow"))
+        header.append(f" [{f.get('category', 'other')}] ", style="bold")
+        excerpt = Text()
+        excerpt.append("Excerpt: ", style="bold")
+        excerpt.append(f"\"{f.get('excerpt', '')}\"", style="italic")
+        # Markdown (not a raw string) so a numbered/bulleted explanation or an inline
+        # `code` reference renders properly instead of running together on one line -
+        # also never re-parsed as Rich markup, same safety property Text() already had.
+        body = Group(header, Markdown(f.get("issue", "") or ""), Text(""), excerpt)
         title = f"{sev.upper()} - Security Finding"
         console.print(Panel(body, title=title, border_style=SEC_BORDER_STYLE.get(sev, "yellow")))
 
@@ -79,11 +84,13 @@ def render_checklist(console: Console, checklist: list) -> None:
         status = c.get("status", "")
         style = CHECKLIST_STATUS_STYLE.get(status, "white")
         label = CHECKLIST_STATUS_LABEL.get(status, status.upper())
-        # Wrap every cell in Text() rather than passing raw strings: "evidence" embeds
-        # verbatim excerpts from the (untrusted) scanned file, and a plain str passed to
-        # add_row() is re-parsed as Rich markup - Text() does not re-parse, matching the
-        # safe pattern already used by render_security_findings() above.
-        ctable.add_row(Text(c.get("id", "")), Text(c.get("title", "")), Text(label, style=style), Text(c.get("evidence", "")))
+        # Wrap every cell in a renderable rather than passing raw strings: "evidence"
+        # embeds verbatim excerpts from the (untrusted) scanned file, and a plain str
+        # passed to add_row() is re-parsed as Rich markup - Text()/Markdown() do not
+        # re-parse, matching the safe pattern already used by render_security_findings().
+        evidence = c.get("evidence", "")
+        evidence_cell = Markdown(evidence) if evidence else Text("")
+        ctable.add_row(Text(c.get("id", "")), Text(c.get("title", "")), Text(label, style=style), evidence_cell)
     console.print(Panel(
         ctable,
         title="OWASP Agentic Skills Top 10 checklist",
@@ -115,7 +122,7 @@ def render_flow_diagram(console: Console, flow_diagram: str | None, source: str 
         console.print(f"[grey50]Flow diagram written to {flow_out}[/grey50]")
 
 
-def render(console: Console, source_label: str, result: dict, flow_out: str | None = None, eli5: bool = False) -> None:
+def render(console: Console, source_label: str, result: dict, flow_out: str | None = None) -> None:
     console.print(Panel(f"[bold]{source_label}[/bold]", style="bold blue", expand=False))
 
     render_security_findings(console, result.get("security_findings") or [])
@@ -136,7 +143,11 @@ def render(console: Console, source_label: str, result: dict, flow_out: str | No
         for w in warnings:
             sev = w.get("severity", "warning")
             style = SEVERITY_STYLE.get(sev, "white")
-            wtable.add_row(Text(SEVERITY_LABEL.get(sev, sev.upper()), style=style), w.get("message", ""))
+            message = w.get("message", "")
+            # Markdown, not a raw string: several messages embed a `field.name`-style
+            # inline code reference (e.g. frontmatter suggestions) that should render as
+            # code, not with literal backticks, and this also avoids Rich-markup re-parsing.
+            wtable.add_row(Text(SEVERITY_LABEL.get(sev, sev.upper()), style=style), Markdown(message) if message else Text(""))
         console.print(Panel(wtable, title="Structural Warnings", border_style="yellow"))
     else:
         console.print(Panel("No structural issues found.", border_style="green"))
@@ -156,24 +167,30 @@ def render(console: Console, source_label: str, result: dict, flow_out: str | No
         console.print(Panel(result["semantic_error"], title="Semantic Analysis", border_style="red"))
         return
 
-    if eli5 and result.get("eli5_summary"):
-        console.print(Panel(result["eli5_summary"], title="Summary (explain like I'm 5)", border_style="magenta"))
-    elif result.get("summary"):
-        console.print(Panel(result["summary"], title="Summary (plain English)", border_style="green"))
+    if result.get("summary"):
+        console.print(Panel(Markdown(result["summary"]), title="Summary", border_style="green"))
+
+    if result.get("eli5_summary"):
+        console.print(Panel(Markdown(result["eli5_summary"]), title="Plain-Language Summary", border_style="magenta"))
 
     if result.get("trigger_conditions"):
-        console.print(Panel(result["trigger_conditions"], title="When it should trigger", border_style="blue"))
+        console.print(Panel(Markdown(result["trigger_conditions"]), title="When it should trigger", border_style="blue"))
 
     ambiguities = result.get("ambiguities") or []
     if ambiguities:
         for i, a in enumerate(ambiguities, 1):
-            body = Text()
-            body.append("Excerpt: ", style="bold")
-            body.append(f"\"{a.get('excerpt', '')}\"\n", style="italic red")
-            body.append("Issue: ", style="bold")
-            body.append(f"{a.get('issue', '')}\n")
-            body.append("Suggested fix: ", style="bold")
-            body.append(a.get("suggested_fix", ""), style="green")
+            excerpt = Text()
+            excerpt.append("Excerpt: ", style="bold")
+            excerpt.append(f"\"{a.get('excerpt', '')}\"", style="italic red")
+            body = Group(
+                excerpt,
+                Text(""),
+                Text("Issue:", style="bold"),
+                Markdown(a.get("issue", "") or ""),
+                Text(""),
+                Text("Suggested fix:", style="bold"),
+                Markdown(a.get("suggested_fix", "") or ""),
+            )
             console.print(Panel(body, title=f"Ambiguity #{i}", border_style="red"))
     else:
         console.print(Panel("No ambiguous or conflicting wording flagged.", border_style="green"))
@@ -244,7 +261,7 @@ def run_directory_mode(console: Console, root: Path, args: argparse.Namespace) -
         if args.json:
             json_results.append({"skill_dir": str(d.skill_dir), "scope": d.scope, "result": result})
         else:
-            render(console, str(d.path), result, eli5=args.eli5)
+            render(console, str(d.path), result)
         summary_rows.append((d, result))
 
     if args.json:
@@ -282,7 +299,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--json", action="store_true", help="Print raw JSON instead of a formatted report.")
     parser.add_argument("--flow-out", metavar="PATH", help="Also write the Mermaid flow diagram source to this file (e.g. flow.mmd).")
-    parser.add_argument("--eli5", action="store_true", help="Show the dead-simple 'explain like I'm 5' summary instead of the technical one.")
     parser.add_argument(
         "--fail-on", choices=["critical", "high", "medium", "none"], default="high",
         help="Minimum security-finding severity that causes a non-zero exit code "
@@ -320,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2))
         return exit_code
 
-    render(console, args.path, result, flow_out=args.flow_out, eli5=args.eli5)
+    render(console, args.path, result, flow_out=args.flow_out)
     return exit_code
 
 

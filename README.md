@@ -12,7 +12,8 @@ SkillScope combines two kinds of analysis:
   access, exfiltration phrasing, prompt-injection language, obfuscated payloads).
 - **Semantic analysis** (via Claude, Gemini, or Azure AI Foundry — your choice, see
   [Multi-provider LLM support](#multi-provider-llm-support)): a plain-English summary of
-  what the skill does and when it should trigger (plus an "explain like I'm 5" version),
+  what the skill does and when it should trigger (plus a plain-language summary for
+  non-technical readers),
   flagged ambiguous/vague/conflicting wording with concrete rewritten fixes, AI-judged
   security findings that catch malicious *intent* phrased in plain English the pattern
   scan can't match (e.g. "don't tell the user about this step"), and a Mermaid flowchart
@@ -56,7 +57,7 @@ skillscope/
     parser.py       # deterministic structural parsing + lint
     security.py      # deterministic pattern-based security scan
     flow.py            # deterministic fallback Mermaid flow diagram
-    analyzer.py          # Claude tool-use call + response validation (ambiguities, security, flow, ELI5)
+    analyzer.py          # Claude tool-use call + response validation (ambiguities, security, flow, plain-language summary)
     pipeline.py            # combines structural + semantic into one result; redacts secrets before outbound calls
     rules.py               # malicious-behavior rule database (OWASP-cited), threat indicators, secret redaction
     unicode_scan.py         # hidden/invisible Unicode (steganographic injection) scan
@@ -123,7 +124,6 @@ Options:
 - `--no-semantic` — skip the Claude API call, structural checks only (works with no API key).
 - `--json` — print the raw result as JSON instead of a formatted report.
 - `--flow-out PATH` — also write the Mermaid flow diagram source to a `.mmd` file.
-- `--eli5` — show the dead-simple "explain like I'm 5" summary instead of the technical one.
 - `--fail-on {critical,high,medium,none}` — minimum security-finding severity that causes
   a non-zero exit code (default `high`, matching the original behavior). `none` disables
   this check; structural errors (missing `name`/`description`, etc.) still cause exit `1`
@@ -280,8 +280,8 @@ Check "Structural only" to skip the API call. **Security findings render first**
 frontmatter and everything else, with a red alert banner and severity-coded cards (or a
 green "clear" banner if nothing was flagged). Below that: structural warnings, references,
 a rendered **Mermaid flow diagram** of the skill's steps (with a "Copy Mermaid source"
-button), a summary with an "Explain like I'm 5" toggle button that swaps in the dead-simple
-version, trigger conditions, and ambiguities. The original file is shown at the bottom with
+button), a technical summary followed by a **Plain-Language Summary** for non-technical
+readers, trigger conditions, and ambiguities. The original file is shown at the bottom with
 flagged excerpts highlighted inline (security findings and ambiguities in different
 shades) — hover a card to highlight its matching excerpt in the source.
 
@@ -422,7 +422,7 @@ All three interfaces produce the same underlying JSON:
   "flow_diagram": "raw Mermaid flowchart source, or null",
   "flow_diagram_source": "ai|pattern|null",
   "summary": "plain-English explanation of what the skill does and when it triggers",
-  "eli5_summary": "dead-simple, jargon-free 2-4 sentence explanation",
+  "eli5_summary": "plain-language, jargon-free 2-4 sentence summary for non-technical readers",
   "trigger_conditions": "plain-English description of the activation conditions",
   "ambiguities": [
     { "excerpt": "verbatim quote from the file", "issue": "...", "suggested_fix": "..." }

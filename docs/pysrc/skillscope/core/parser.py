@@ -25,8 +25,12 @@ from .unicode_scan import scan_hidden_unicode
 # followed by - a classic polynomial-backtracking shape on adversarial input (e.g. a
 # frontmatter fence followed by thousands of blank lines and no closing `---`). Horizontal
 # whitespace only removes the ambiguity outright, and is the actually-intended allowance
-# (trailing spaces on the `---` line), not blank lines before it.
-FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n(.*?\n)---[ \t]*\n?", re.DOTALL)
+# (trailing spaces on the `---` line), not blank lines before it. \r? before each \n keeps
+# CRLF-authored files working - the web app's upload/paste path decodes raw bytes with no
+# newline normalization (unlike a local file opened in Python's text mode), so a literal
+# \r before \n reaches this regex for real, not just hypothetically. \r doesn't overlap
+# with [ \t]*, so this doesn't reintroduce the ambiguity being removed above.
+FRONTMATTER_RE = re.compile(r"\A---[ \t]*\r?\n(.*?\n)---[ \t]*\r?\n?", re.DOTALL)
 # \S.* rather than .* for the heading text: \s+ and a following .* both match spaces/tabs,
 # so the same backtracking ambiguity applies to a header line padded with many spaces and
 # no real content. Requiring the text to start with a non-whitespace character fixes the

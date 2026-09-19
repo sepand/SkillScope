@@ -20,8 +20,18 @@ from .rules import scan_threat_indicators
 from .security import scan as scan_security
 from .unicode_scan import scan_hidden_unicode
 
-FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?\n)---\s*\n?", re.DOTALL)
-HEADER_RE = re.compile(r"^(#{1,6})\s+(.*)$", re.MULTILINE)
+# [ \t]* rather than \s* before each required \n: \s includes \n itself, so \s*\n has
+# many ways to split a run of blank lines between the star and the literal newline it's
+# followed by - a classic polynomial-backtracking shape on adversarial input (e.g. a
+# frontmatter fence followed by thousands of blank lines and no closing `---`). Horizontal
+# whitespace only removes the ambiguity outright, and is the actually-intended allowance
+# (trailing spaces on the `---` line), not blank lines before it.
+FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n(.*?\n)---[ \t]*\n?", re.DOTALL)
+# \S.* rather than .* for the heading text: \s+ and a following .* both match spaces/tabs,
+# so the same backtracking ambiguity applies to a header line padded with many spaces and
+# no real content. Requiring the text to start with a non-whitespace character fixes the
+# split point uniquely (and an all-whitespace "heading" isn't meaningful content anyway).
+HEADER_RE = re.compile(r"^(#{1,6})[ \t]+(\S.*)$", re.MULTILINE)
 
 CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
 URL_RE = re.compile(r"https?://[^\s)>\]\"']+")

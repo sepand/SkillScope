@@ -21,7 +21,10 @@ import yaml
 
 from .models import FrontmatterFixResult, StructuralWarning
 
-FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?\n)---\s*\n?", re.DOTALL)
+# See parser.py::FRONTMATTER_RE for why [ \t]* (not \s*) precedes each required \n - \s*\n
+# has many ways to split a run of blank lines, a polynomial-backtracking shape on
+# adversarial input.
+FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n(.*?\n)---[ \t]*\n?", re.DOTALL)
 
 _TEMPLATE_INDENT = "  "
 

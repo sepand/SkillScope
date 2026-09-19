@@ -206,4 +206,8 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    # Debug mode is opt-in, not the default - Werkzeug's interactive debugger executes
+    # arbitrary code on any exception page, which is fine on a developer's own machine but
+    # a remote-code-execution hole if this process is ever reachable from anywhere else.
+    debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
+    app.run(debug=debug, port=5000)

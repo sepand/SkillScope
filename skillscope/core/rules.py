@@ -283,8 +283,16 @@ _MANIFEST_GO_REPLACE_CITATION = (
     "- reviewers should verify the replacement target matches intent."
 )
 
+# Requires the actual fetch-AND-execute shape (matching security.py's own
+# remote_code_execution pattern), not just the tool's presence - a bare `curl -o file` or
+# `wget` invocation to download a prebuilt binary (a common, legitimate postinstall
+# pattern, e.g. esbuild/sharp-style native-binary installers) or an `nc -z host port`
+# healthcheck must not fire this. `nc` is narrowed to `-e` (netcat's "execute program
+# after connect" flag - the actual reverse-shell primitive), not any `nc -<flag>`.
 _MANIFEST_NETWORK_EXEC_RE = re.compile(
-    r"\b(curl|wget)\b|\bnc\s+-|\beval\s*\(|base64\s+(-d|--decode)\b",
+    r"(curl|wget)\s+[^|;&]*\|\s*(sudo\s+)?(sh|bash|zsh|python[23]?)\b"
+    r"|\bnc\s+-[a-z]*e\b"
+    r"|\beval\s*\(|base64\s+(-d|--decode)\b",
     re.IGNORECASE,
 )
 # pip's own requirements.txt line syntax: `git+https://...` (optionally `-e git+...`).

@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .models import SecurityFinding
 from .parser import extract_references
+from .rules import scan_manifest_file
 from .safe_fs import walk_files
 from .security import scan as scan_security
 from .unicode_scan import scan_hidden_unicode
@@ -25,8 +26,12 @@ from .unicode_scan import scan_hidden_unicode
 # they know what wasn't inspected.
 _TEXT_EXTENSIONS = {
     ".md", ".txt", ".py", ".js", ".ts", ".jsx", ".tsx", ".json", ".yaml", ".yml",
-    ".sh", ".bash", ".ps1", ".rb", ".go", ".rs", ".toml", ".cfg", ".ini", ".html", ".css",
+    ".sh", ".bash", ".ps1", ".rb", ".go", ".rs", ".mod", ".toml", ".cfg", ".ini", ".html", ".css",
 }
+
+# Extension-less manifest filenames (Path.suffix is "" for these) that still need to be
+# read as text - matched by exact filename, not extension.
+_TEXT_FILENAMES = {"Pipfile"}
 
 # A SKILL.md bundle's own scripts are small; skip content-scanning anything larger rather
 # than loading it fully into memory, and list it as "not inspected" instead.
@@ -77,7 +82,7 @@ class SkillBundle:
 
 
 def _is_text_file(path: Path) -> bool:
-    return path.suffix.lower() in _TEXT_EXTENSIONS
+    return path.suffix.lower() in _TEXT_EXTENSIONS or path.name in _TEXT_FILENAMES
 
 
 def build_bundle(
@@ -126,7 +131,10 @@ def build_bundle(
         # Everything else about it (size, listing, tool/network usage for the aggregate
         # checks below) is still tracked.
         if relpath != "SKILL.md":
-            file_findings = scan_security(content) + scan_hidden_unicode(content)
+            file_findings = (
+                scan_security(content) + scan_hidden_unicode(content)
+                + scan_manifest_file(relpath, content)
+            )
             for finding in file_findings:
                 finding.source_file = relpath
             findings.extend(file_findings)

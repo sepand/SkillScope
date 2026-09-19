@@ -15,6 +15,7 @@ are attribution for that reuse, not a claim of official/certified status.
 
 from __future__ import annotations
 
+import json
 import re
 
 from .models import SecurityFinding
@@ -255,6 +256,213 @@ def check_combined_payload_injection(findings: list[SecurityFinding]) -> list[Se
         source="pattern",
         citation=_SNYK_CITATION + " (91% of confirmed-malicious skills combined both.)",
     )]
+
+
+# --- Dependency-manifest checks (package.json / requirements.txt / Pipfile / go.mod) ---
+# Narrowly scoped to a small number of concrete, widely-documented supply-chain
+# techniques that are decidable from a single manifest file's own text, with no
+# package-registry lookup
+# needed - this is NOT a general dependency auditor (no typosquat detection, no CVE
+# database; those need external registry/vulnerability data SkillScope doesn't have and
+# has deliberately not wired up as a live external fetch - see module docstring).
+_MANIFEST_INSTALL_HOOK_CITATION = (
+    "Documented npm supply-chain technique: a malicious package version adds a "
+    "preinstall/install/postinstall lifecycle script that runs automatically on "
+    "`npm install`, before a human ever reviews the code - the mechanism used in the 2018 "
+    "event-stream compromise and the 2021 ua-parser-js/coa/rc compromises."
+)
+_MANIFEST_VCS_BYPASS_CITATION = (
+    "pip supports installing a dependency directly from a VCS URL (git+/hg+/svn+/bzr+) "
+    "instead of a published package-index release - a supported feature, but one that "
+    "bypasses the index's own review/typosquat protections entirely, so the actual "
+    "target warrants a manual look."
+)
+_MANIFEST_GO_REPLACE_CITATION = (
+    "Go's own module documentation: a 'replace' directive silently substitutes a "
+    "different source (fork, URL, or local path) for a dependency's declared module path "
+    "- reviewers should verify the replacement target matches intent."
+)
+
+# Requires the actual fetch/decode-AND-execute shape (matching security.py's own
+# remote_code_execution pattern), not just the tool's presence - a bare `curl -o file` or
+# `wget` invocation to download a prebuilt binary (a common, legitimate postinstall
+# pattern, e.g. esbuild/sharp-style native-binary installers), an `nc -z host port`
+# healthcheck, or a `base64 -d config.b64 > config.json` decode-to-file must not fire
+# this. `eval(` is narrowed to actually wrapping a decode call (`atob`/`Buffer.from`) -
+# matching the "decode-then-eval" technique this rule's own citation describes, not any
+# eval() call regardless of what it's evaluating. `nc`/`ncat` uses a lookahead for a
+# `-...e` flag anywhere later in the command, not just immediately after the tool name,
+# since real reverse-shell invocations commonly separate flags (`nc -v -e /bin/sh ...`),
+# not just combine them (`nc -e ...`/`nc -ne ...`); `base64` requires the decoded output
+# to be piped into an interpreter, not just decoded.
+_MANIFEST_NETWORK_EXEC_RE = re.compile(
+    r"(curl|wget)\s+[^|;&]*\|\s*(sudo\s+)?(sh|bash|zsh|python[23]?)\b"
+    r"|\b(nc|ncat)\b(?=[^\n;&]*\s-[a-z]*e\b)"
+    r"|\beval\s*\(\s*(atob\(|Buffer\.from\()"
+    r"|base64\s+(-d|--decode)\b[^|;&]*\|\s*(sudo\s+)?(sh|bash|zsh|python[23]?)\b",
+    re.IGNORECASE,
+)
+# pip's own requirements.txt line syntax: `git+https://...` (optionally `-e git+...`).
+_PIP_VCS_INSTALL_RE = re.compile(
+    r"^\s*(?:-e\s+)?(?:git|hg|svn|bzr)\+[a-z][a-z0-9+.-]*://\S+",
+    re.IGNORECASE | re.MULTILINE,
+)
+# Pipfile's TOML inline-table syntax: `name = {git = "https://...", ...}` - a different
+# spelling of the same VCS-bypass dependency, not decidable with the regex above.
+_PIPFILE_VCS_RE = re.compile(
+    r"\{[^{}]*\b(?:git|hg|svn|bzr)\s*=\s*[\"'][^\"']+[\"'][^{}]*\}",
+    re.IGNORECASE,
+)
+# go.mod's single-line form: `replace old/module => new/module v1.2.3`.
+_GO_REPLACE_SINGLE_RE = re.compile(r"^[ \t]*replace\s+(?!\()\S+.*=>.*\S", re.MULTILINE)
+# go.mod's block form: `replace (\n  old => new\n  ...\n)` - each inner line omits the
+# `replace` keyword, so it needs its own extraction pass over the block's body. Anchored
+# to line start (like the single-line pattern above) so a commented-out `// replace (`
+# isn't treated as a real block opener. The closing paren is matched as its own line
+# (`)` alone, optionally indented - the real go.mod convention) rather than the first `)`
+# character anywhere in the block body, since a trailing comment inside the block can
+# legitimately contain a `)` (e.g. `// see issue (#123)`) that would otherwise truncate
+# the capture before later replace lines. Tolerates a trailing \r before each \n/end-of-
+# line so a Windows-CRLF go.mod still matches - bundle.py's own Path.read_text() already
+# normalizes CRLF to LF before content reaches here, but this regex shouldn't silently
+# depend on that; it should be correct standalone for any direct caller.
+_GO_REPLACE_BLOCK_RE = re.compile(
+    r"^[ \t]*replace\s*\([ \t]*\r?\n(.*?)^[ \t]*\)[ \t]*\r?$", re.DOTALL | re.MULTILINE,
+)
+_GO_REPLACE_BLOCK_LINE_RE = re.compile(r"^[ \t]*\S+.*=>.*\S", re.MULTILINE)
+
+
+def _scan_package_json_scripts(content: str) -> list[SecurityFinding]:
+    """Flags an npm lifecycle install script that runs a network-fetch-and-execute or
+    decode/eval pattern - these hooks run automatically on `npm install`, before any
+    human reviews the code."""
+    try:
+        data = json.loads(content)
+    except (ValueError, RecursionError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    scripts = data.get("scripts")
+    if not isinstance(scripts, dict):
+        return []
+
+    findings: list[SecurityFinding] = []
+    for hook in ("preinstall", "install", "postinstall"):
+        cmd = scripts.get(hook)
+        if isinstance(cmd, str) and _MANIFEST_NETWORK_EXEC_RE.search(cmd):
+            findings.append(SecurityFinding(
+                severity="critical",
+                category="malicious_install_hook",
+                excerpt=f'"{hook}": "{cmd}"'[:200],
+                issue=(
+                    f"The package.json '{hook}' lifecycle script runs automatically on "
+                    "`npm install`, before any human reviews it, and this one invokes a "
+                    "network-fetch-and-execute or decode/eval pattern - the exact "
+                    "mechanism used in real npm supply-chain compromises."
+                ),
+                source="pattern",
+                citation=_MANIFEST_INSTALL_HOOK_CITATION,
+            ))
+    return findings
+
+
+_FULL_LINE_COMMENT_RE = re.compile(r"^[ \t]*#.*$", re.MULTILINE)
+
+
+def _strip_full_line_comments(content: str) -> str:
+    """Removes lines whose first non-whitespace character is `#` (a requirements.txt or
+    Pipfile full-line comment - e.g. a commented-out example dependency), so it doesn't
+    trip the VCS-bypass check below. Only a full-line comment is stripped, not text after
+    a mid-line `#` - a real VCS URL can legitimately contain `#egg=name` as a fragment, and
+    naively truncating at the first `#` would corrupt that match."""
+    return _FULL_LINE_COMMENT_RE.sub("", content)
+
+
+def _scan_pip_vcs_installs(content: str, pattern: re.Pattern) -> list[SecurityFinding]:
+    """Flags a requirements.txt/Pipfile dependency installed directly from a VCS URL,
+    bypassing the package index's own review/typosquat protections. `pattern` selects the
+    ecosystem-specific spelling (pip's `git+https://` line syntax vs. Pipfile's TOML
+    inline-table syntax) - the two files express the same bypass differently."""
+    content = _strip_full_line_comments(content)
+    findings: list[SecurityFinding] = []
+    seen: set[str] = set()
+    for m in pattern.finditer(content):
+        excerpt = m.group(0).strip()
+        if excerpt in seen:
+            continue
+        seen.add(excerpt)
+        findings.append(SecurityFinding(
+            severity="medium",
+            category="manifest_vcs_bypass",
+            excerpt=excerpt[:200],
+            issue=(
+                "Installs a dependency directly from a VCS URL instead of a published "
+                "package-index release, bypassing the index's own review/typosquat "
+                "protections. Review exactly what repository and ref this points to."
+            ),
+            source="pattern",
+            citation=_MANIFEST_VCS_BYPASS_CITATION,
+        ))
+    return findings
+
+
+def _scan_go_mod_replace(content: str) -> list[SecurityFinding]:
+    """Flags a go.mod 'replace' directive, which silently redirects a dependency to a
+    different source - a legitimate feature (local development, patched forks) that is
+    also a documented way to smuggle code in under a trusted-looking import path. Handles
+    both go.mod forms: the single-line `replace old => new` and the block form
+    `replace (\n old => new\n ... \n)`, whose inner lines omit the `replace` keyword."""
+    excerpts: list[str] = []
+    for m in _GO_REPLACE_SINGLE_RE.finditer(content):
+        excerpts.append(m.group(0).strip())
+    for block_m in _GO_REPLACE_BLOCK_RE.finditer(content):
+        for line_m in _GO_REPLACE_BLOCK_LINE_RE.finditer(block_m.group(1)):
+            line = line_m.group(0).split("//", 1)[0].strip()
+            if line:
+                # Block-form lines omit the `replace` keyword (it's on the block's own
+                # opening line, not repeated per entry) - prefix it back on so excerpts
+                # read consistently regardless of which go.mod form they came from.
+                excerpts.append(f"replace {line}")
+
+    findings: list[SecurityFinding] = []
+    seen: set[str] = set()
+    for excerpt in excerpts:
+        if excerpt in seen:
+            continue
+        seen.add(excerpt)
+        findings.append(SecurityFinding(
+            severity="medium",
+            category="manifest_dependency_redirect",
+            excerpt=excerpt[:200],
+            issue=(
+                "A go.mod 'replace' directive redirects a dependency to a different "
+                "source (a fork, URL, or local path) instead of its declared module "
+                "path. This is a legitimate feature but is also a documented way to "
+                "smuggle malicious code in under a trusted-looking import path - review "
+                "the replacement target."
+            ),
+            source="pattern",
+            citation=_MANIFEST_GO_REPLACE_CITATION,
+        ))
+    return findings
+
+
+def scan_manifest_file(filename: str, content: str) -> list[SecurityFinding]:
+    """Dispatches to the manifest-specific check for known dependency-manifest filenames.
+    Returns [] for anything else - this is intentionally narrow (one concrete, cited
+    technique per ecosystem: npm install hooks, pip/Pipfile VCS-bypass installs, go.mod
+    replace redirects), not a general dependency auditor. Called per-file from
+    bundle.py's directory walk; single-file mode has no separate manifest to scan."""
+    name = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    if name == "package.json":
+        return _scan_package_json_scripts(content)
+    if name == "requirements.txt":
+        return _scan_pip_vcs_installs(content, _PIP_VCS_INSTALL_RE)
+    if name == "Pipfile":
+        return _scan_pip_vcs_installs(content, _PIPFILE_VCS_RE)
+    if name == "go.mod":
+        return _scan_go_mod_replace(content)
+    return []
 
 
 def redact_secrets(content: str, findings: list[SecurityFinding]) -> str:
